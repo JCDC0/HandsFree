@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="HandsFree Offline Voice Overlay"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Narinig (Transcribed):"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/transcribed_text"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="#F0F0F0"
+        android:padding="8dp"
+        android:text="..."
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Salin (Translated):"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/translated_text"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="#F0F0F0"
+        android:padding="8dp"
+        android:text="..."
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/start_button"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:text="Start Mic &amp; VOSK"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/perm_button"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:text="Open Accessibility Settings" />
+
+</LinearLayout>
