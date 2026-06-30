@@ -3,7 +3,7 @@
 **An Offline Hands-Free Android App Using Voice Commands in Filipino, English, and Taglish**
 
 Holy Angel University — School of Computing  
-Capstone Thesis · June–October 2026
+Capstone Thesis · July–September 2026
 
 ---
 
@@ -83,7 +83,7 @@ HandsFree/
 │       ├── java/com/example/handsfree/
 │       │   ├── MainActivity.kt                # Debug screen (Phase 1)
 │       │   ├── pipeline/
-│       │   │   ├── AudioPreprocessor.kt       # Mic capture + VAD
+│       │   │   ├── AudioPreprocessor.kt       # Mic capture + spectral subtraction + VAD
 │       │   │   ├── VoskSpeechEngine.kt        # Offline ASR via VOSK
 │       │   │   ├── TranslationLayer.kt        # TL/EN → EN normalizer
 │       │   │   ├── AppStateMachine.kt         # 6-state FSM
@@ -102,18 +102,21 @@ HandsFree/
 
 ---
 
-## Development Plan (June–October 2026)
+## Development Plan (July–September 2026)
 
 This plan is written so that **future AI coding agents** (OpenCode, Claude Code, etc.)
 can read it and know exactly what to build. Each task is a self-contained prompt.
 
 ---
 
-### Phase 1: Core Pipeline (Weeks 1–3) — **CURRENT PHASE**
+### Phase 1: Core Pipeline (Weeks 1–2) — **CURRENT PHASE**
 
 ```
 Goal: Mic → VOSK → Translation → Text on screen.
 Dependency chain: AudioPreprocessor → VoskSpeechEngine → TranslationLayer → OverlayService → MainActivity
+
+NOTE: Modules A (FSM), B (Intent), and G (Onboarding) have ZERO dependencies — they start in
+parallel with Phase 1 during weeks 1–2. See the Weekly Breakdown table below.
 ```
 
 #### Task 1.1 — AudioPreprocessor (Dev A · Branch: `dev/core-pipeline`)
@@ -127,10 +130,19 @@ IMPLEMENT startCapture():
    - audioFormat = AudioFormat.ENCODING_PCM_16BIT
    - bufferSize = AudioRecord.getMinBufferSize(16000, CHANNEL_IN_MONO, ENCODING_PCM_16BIT)
 2. Start a coroutine/thread that reads shorts from AudioRecord in a loop
-3. For now, forward raw buffers to a callback: (ShortArray) -> Unit
-4. stopCapture(): stop AudioRecord, release resources
+3. Apply spectral subtraction to the raw buffer before forwarding:
+   - Maintain a rolling noise profile estimate (first 500ms of silence)
+   - Subtract noise magnitude from signal magnitude in frequency domain
+   - Reconstruct time-domain signal via inverse FFT
+4. Apply Voice Activity Detection (VAD):
+   - Track short-term energy vs noise floor
+   - Flag speech_start when energy exceeds threshold for 100ms
+   - Flag speech_end when energy drops below threshold for 800ms
+5. Forward clean buffers to a callback: (ShortArray) -> Unit
+6. stopCapture(): stop AudioRecord, release resources
 
 VERIFY: Log.d() buffer sizes to confirm mic is capturing. Run on physical device.
+  Test with background noise (fan, TV) — output should be cleaner than raw mic input.
 ```
 
 #### Task 1.2 — VoskSpeechEngine (Dev A · Branch: `dev/core-pipeline`)
@@ -143,9 +155,12 @@ IMPLEMENT unpackModelsIfNeeded():
 3. Same for vosk-model-tl-ph-generic-0.6
 4. Show progress (the Filipino model takes 30-60 seconds to unpack)
 
-IMPLEMENT initRecognizer(language: String):
-1. val model = Model(modelPath)
-2. val recognizer = Recognizer(model, 16000.0f)
+IMPLEMENT initRecognizer(modelType: String):
+  Supports TWO models (per manuscript p.16: LibriSpeech EN + Common Voice Filipino TL):
+1. "en" → val model = Model(filesDir/vosk-model-small-en-us-0.15/)
+2. "tl" → val model = Model(filesDir/vosk-model-tl-ph-generic-0.6/)
+3. val recognizer = Recognizer(model, 16000.0f)
+4. Store active model type for switching
 
 IMPLEMENT acceptWaveform(buffer: ShortArray): String?:
 1. recognizer.acceptWaveForm(buffer, buffer.size)
@@ -153,6 +168,7 @@ IMPLEMENT acceptWaveform(buffer: ShortArray): String?:
 3. If false: return recognizer.partialResult for partial display
 
 VERIFY: Call recognizer.acceptWaveForm with silence → partialResult should show ""
+  Test: English command with "en" model → transcribes. Tagalog command with "tl" model → transcribes.
 ```
 
 #### Task 1.3 — TranslationLayer (Dev B · Branch: `dev/core-pipeline`)
@@ -177,11 +193,12 @@ VERIFY: Input "buksan ang settings" → output "open the settings"
 ```
 IN OverlayService.onCreate():
 1. Call voskSpeechEngine.unpackModelsIfNeeded() (blocking, show progress)
-2. Call voskSpeechEngine.initRecognizer("tl") for Filipino-first mode
-3. Call audioPreprocessor.startCapture()
-4. Wire: AudioPreprocessor buffer callback → voskSpeechEngine.acceptWaveform()
-5. Wire: VoskSpeechEngine result → translationLayer.normalize()
-6. Send normalized text to MainActivity via LocalBroadcastManager or a callback
+2. Load BOTH models: voskSpeechEngine.initRecognizer("en") and store; also prepare "tl" recognizer
+3. Default recognizer: use "tl" (Filipino-first) — user can switch via debug UI
+4. Call audioPreprocessor.startCapture()
+5. Wire: AudioPreprocessor buffer callback → voskSpeechEngine.acceptWaveform()
+6. Wire: VoskSpeechEngine result → translationLayer.normalize()
+7. Send normalized text to MainActivity via LocalBroadcastManager or a callback
 
 IN MainActivity:
 1. Receive normalized text from OverlayService
@@ -211,11 +228,14 @@ IN MainActivity:
 
 ---
 
-### Phase 2: Backend Modules (Weeks 4–9)
+### Phase 2: Backend Modules (Weeks 1–7)
 
 ```
 These modules are designed to be worked on IN PARALLEL by different team members.
 Each module gets its own Git branch. Dependencies are listed explicitly.
+
+CRITICAL: Modules A and B have ZERO dependencies — start them in Week 1 alongside Phase 1.
+This is the single biggest timeline compression lever from the original 17-week plan.
 
 Module dependency graph:
   Module A (FSM) ─────────────────────┐
@@ -225,7 +245,7 @@ Module dependency graph:
                                        ├──→ Module E (Scheduling)
                                        └──→ Module F (Grid Overlay)
 
-  Module G (Permission Onboarding) — independent, can be done anytime.
+  Module G (Permission Onboarding) — independent, can be done anytime (start Week 1).
 ```
 
 ---
@@ -383,6 +403,7 @@ INTEGRATE for CALL_ACCEPT intent: Detect incoming call UI → tap "Answer" butto
 
 ```
 Scheduling uses Android's AlarmManager API — purely programmatic, no gesture dispatch.
+Covers CREATING, READING, and CHECKING reminders and alarms (per manuscript p.21 scope).
 
 IMPLEMENT setAlarm(hours: Int, minutes: Int, label: String):
 1. val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
@@ -396,25 +417,40 @@ IMPLEMENT setReminder(text: String, delayMinutes: Int):
 2. Create notification channel "HandsFree Reminders"
 3. Schedule notification at (now + delayMinutes)
 
+IMPLEMENT listUpcomingAlarms(): List<String>:
+1. Use AlarmManager.getNextAlarmClock() to read pending alarms
+2. Return formatted list with time and label
+3. For reminders: query active notifications from NotificationManager.getActiveNotifications()
+4. Filter for HandsFree channel notifications
+
+IMPLEMENT checkReminders(): String:
+1. Query NotificationManager for active HandsFree notifications
+2. Return human-readable summary: "You have 2 reminders: 'call mom' at 3pm, 'buy milk' at 5pm"
+
 CREATE AlarmReceiver: BroadcastReceiver:
 1. onReceive(): Show notification with label
 
 PARSE TIME FROM COMMAND:
   "set alarm for 7 am" → hours=7, minutes=0
   "remind me in 10 minutes to call mom" → delayMinutes=10, text="call mom"
+  "what are my alarms" → call listUpcomingAlarms()
+  "check my reminders" → call checkReminders()
 
 VERIFY: "Set alarm for 1 minute from now" → notification fires after 1 minute.
+  "What are my alarms" → returns list of pending alarms.
 ```
 
 ---
 
-#### Module F: Grid Overlay Fallback · Branch `dev/module-grid`
+#### Module F: Grid Overlay (Core Coordinate Mapping) · Branch `dev/module-grid`
 **Prerequisites:** Module A (FSM). No DFS needed.  
 **Files:** Create `overlay/GridOverlayView.kt`
 
 ```
-The grid overlay is a fallback when DFS can't find a node.
-It divides the screen into a numbered grid, user says the grid number.
+The grid overlay is a core deterministic coordinate mapping mechanism (per manuscript Objective, p.20:
+"design a deterministic coordinate mapping mechanism that projects an absolute geometric grid over
+the graphical interface"). It operates alongside the DFS node locator as a co-equal mapping path.
+Users can invoke grid navigation for ANY screen, not just when DFS fails.
 
 IMPLEMENT GridOverlayView (extends View):
 1. Draw transparent grid with numbered cells (3×3 or 4×4 configurable)
@@ -467,40 +503,39 @@ VERIFY: Fresh install → see permission cards. Grant each → cards update. All
 
 ---
 
-### Phase 3: Research & Evaluation (Weeks 10–17)
+### Phase 3: Research & Evaluation (Weeks 7–12)
 
 ```
-PREREQUISITE: All Phase 2 modules complete and integrated.
+PREREQUISITE: Phase 1 complete + Modules A–G at integration/milestone stage.
 
-TASKS (sequential):
-  1. Build logging infrastructure:
+NOTE: Recruitment starts WEEK 1 (not after coding finishes).
+  Participants are pre-screened in weeks 3–5 so they're ready when testing begins.
+
+TASKS (overlapping where possible):
+  1. Build logging infrastructure (Week 7):
      - Timestamp from voice-input-detection to gesture-executed
      - Log every command: raw transcription, normalized text, intent, success/fail
      - Log latency per command (ms)
      - Log memory usage (Runtime.getRuntime().totalMemory() - freeMemory())
 
-  2. Recruit participants:
-     - 10+ general users (friends/family, adults 18+)
-     - 1-2 IT professionals for expert evaluation
-
-  3. Quantitative benchmark runs:
+  2. Quantitative benchmark runs (Week 8):
      - Researchers execute standardized commands (not general users)
      - Collect: latency (ms), accuracy (correct intents / total), translation ratio
 
-  4. Usability testing:
+  3. Usability testing (Weeks 9–10):
      - Participants use app on their own phones
      - Administer SUS questionnaire (Google Forms, 10 items)
      - Score: odd items (position - 1), even items (5 - position), sum × 2.5
 
-  5. Expert evaluation:
+  4. Expert evaluation (Week 10):
      - IT professionals evaluate: architecture, gesture accuracy, offline reliability
      - 15-item evaluation form (Appendix E)
 
-  6. Analysis:
+  5. Analysis (Weeks 11–12):
      - SPSS for quantitative (descriptive stats, SUS scores)
      - Thematic coding for qualitative (observation notes, exit interviews)
 
-  7. Write Results & Discussion, prepare defense slides
+  6. Write Results & Discussion, prepare defense slides (Week 12)
 ```
 
 ---
@@ -510,25 +545,61 @@ TASKS (sequential):
 | Module | Branch | Description | Dependency | Assigned To |
 |--------|--------|-------------|------------|-------------|
 | **Phase 1** | `dev/core-pipeline` | Mic, VOSK, Translation, Debug UI | — | Coder 1 & 2 |
-| A: FSM | `dev/module-fsm` | 6-state machine, rigid transitions | None | Coder 1 |
-| B: Intent | `dev/module-intent` | Levenshtein fuzzy matcher | None | Coder 2 |
+| A: FSM | `dev/module-fsm` | 6-state machine, rigid transitions | **None** (start Wk 1) | Coder 2 |
+| B: Intent | `dev/module-intent` | Levenshtein fuzzy matcher | **None** (start Wk 1) | Coder 2 |
 | C: App Launch | `dev/module-app-launch` | startActivity by package name | A + B | Coder 1 |
 | D: DFS | `dev/module-dfs` | Node locator + Search/Msg/Call | A + B | Coder 2 |
-| E: Scheduling | `dev/module-scheduling` | AlarmManager, no gestures | A + B | Coder 1 |
-| F: Grid | `dev/module-grid` | Coordinate fallback overlay | A | Coder 2 |
-| G: Onboarding | `dev/module-onboarding` | Permission UI | None | Either |
+| E: Scheduling | `dev/module-scheduling` | AlarmManager (create/read/check) | A + B | Coder 1 |
+| F: Grid | `dev/module-grid` | Core coordinate mapping overlay | A | Coder 1 |
+| G: Onboarding | `dev/module-onboarding` | Permission UI | **None** (start Wk 1) | Either |
 | Vocabulary | `dev/vocabulary` | JSON lexicon seeding | None | Non-coders |
 
+## 12-Week Parallel Plan (July 1 → September 22, 2026)
+
 ```
-WEEKLY BREAKDOWN:
-  Week 1-3:  Phase 1 (both coders together on dev/core-pipeline)
-  Week 4:    Module A (Coder 1) + Module B (Coder 2) — PARALLEL
-  Week 5:    Module C (Coder 1) + Module D (Coder 2) — PARALLEL, App Launch demo
-  Week 6:    Module E (Coder 1) + Module F (Coder 2) — PARALLEL
-  Week 7:    Module D continued (DFS iteration-heavy) + Module G
-  Week 8-9:  Integration, bug fixing, logging infrastructure
-  Week 10+:  Phase 3 (research & evaluation)
+Week | Dates        | Coder 1                        | Coder 2                        | Non-coders                    | Research Track
+-----|-------------|--------------------------------|--------------------------------|-------------------------------|--------------------------
+  1  | Jul 1–7     | Phase 1: AudioPreproc (1.1)   | Module B: Intent (zero-dep)   | Vocab seeding begins          | Recruitment kickoff
+     |             | + VoskEngine (1.2)            |                                |                               | Informed-consent draft
+  2  | Jul 8–14    | Phase 1: TranslationLayer     | Module A: FSM (zero-dep)      | Continue vocabulary           | Schedule wk 9 sessions
+     |             | (1.3) + Pipeline wiring (1.4) |                                |                               |
+  3  | Jul 15–21   | Module C: App Launch          | Module G: Onboarding          | Review lexicon w/ native spkrs| Finalize SUS + Expert forms
+     |             | (needs A+B)                   | (zero-dep)                    |                               |
+  4  | Jul 22–28   | Module E: Scheduling          | Module D: DFS + Search/Msg    | Add missing translations      | Pre-screen participants
+     |             | incl. read/check (needs A+B)  | /Call BEGINS (needs A+B)     | from VOSK output              |
+  5  | Jul 29–Aug 4| Module F: Grid Overlay        | Continue D iteration          | Test lexicon vs live VOSK     | Confirm expert evaluators
+     |             | (needs A)                     |                               |                               |
+  6  | Aug 5–11    | Integrate E + F               | D stable; integrate           | Final lexicon push            | Logging spec finalized
+     |             | First 5-intent demo           | search/msg/call               |                               |
+  7  | Aug 12–18   | Logging infra (latency,       | D bug-fix pass                | Manual testing checklist      | Build logging into app
+     |             | memory, intent log)           |                               |                               |
+  8  | Aug 19–25   | Quantitative benchmarks       | Bug-fix / polish              | Participant onboarding docs   | Schedule wk 9 sessions
+     |             | (researcher-only)             |                               |                               |
+  9  | Aug 26–Sep 1| Usability testing sessions    | On-site support               | Observe, take field notes     | Begin SPSS aggregation
+     |             | (SUS, general users)          |                               |                               |
+ 10  | Sep 2–8     | Continue usability testing    | Expert evaluation support     | Expert eval forms collected   | Latency/accuracy stats done
+     |             | + Expert evaluation sessions  |                               |                               |
+ 11  | Sep 9–15    | Analysis: SPSS + SUS scoring  | Code thematic transcripts     | Help with thematic coding     | Defense slides draft
+     |             | + thematic coding             |                               |                               |
+ 12  | Sep 16–22   | Buffer / re-runs / Results    | Buffer / polish               | Final paper sections          | **DELIVER: Sep 22, 2026**
+     |             | & Discussion writing          |                               |                               |
 ```
+
+**Critical path:** Phase 1 → (A,B) → D (D is the longest chain; iteration-heavy per L334).
+**Buffer:** Week 13 (Sep 23–29) absorbs one slipped week on Module D.
+
+### Key Strategy Notes
+
+1. **Recruitment begins Week 1** — don't wait for the app to be finished. Pre-screen
+   participants by Week 5 so they commit to Week 9–10 sessions.
+2. **Modules A, B, G have zero dependencies** — start them Day 1 alongside Phase 1.
+   This is what compresses 17 weeks → 12.
+3. **Module D is the critical-path risk.** Hard-scope to 3 target apps initially
+   (Chrome, Messages, Phone) and document others as limitations (per manuscript p.22).
+4. **Both VOSK models must be loadable** — "en" for English commands, "tl" for
+   Filipino/Taglish. Single-model mode will silently fail on half of user input.
+5. **Grid overlay is a core mechanism** (per manuscript Objective, p.20), not a
+   fallback. Test and describe it as a co-equal mapping path alongside DFS.
 
 ---
 
@@ -676,8 +747,10 @@ Claude, etc.) can help you generate entries faster.
 ### Participant Recruitment (start early — this takes calendar time)
 
 - **Target:** 10+ adults (18+) who use smartphones regularly.
-- **Method:** Friends, family, classmates. Convenience sampling is acceptable —
-  your paper already describes purposive + snowball sampling.
+- **Method:** Purposive and snowball sampling (per manuscript p.24). Friends, family, classmates
+  who meet the criteria (adults 18+, regular smartphone users) are eligible. Enrolled participants
+  can refer peers — this expands reach while maintaining the manuscript's described method.
+  Do NOT use convenience sampling alone; the manuscript commits to purposive + snowball.
 - **Expert evaluators:** 1-2 Android developers or IT professionals.
 - Prepare a simple informed consent form (your adviser can review it once contact opens).
 - Schedule testing sessions in advance — don't wait until the app is done to start asking.
