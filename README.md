@@ -27,7 +27,7 @@ https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
 ```
 Extract to: `app/src/main/assets/vosk-model-small-en-us-0.15/`
 
-### 2. Filipino VOSK Model (~776MB) ⚠️ LARGE
+### 2. Filipino VOSK Model (~776MB)
 ```
 https://alphacephei.com/vosk/models/vosk-model-tl-ph-generic-0.6.zip
 ```
