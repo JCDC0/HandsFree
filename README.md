@@ -532,32 +532,165 @@ WEEKLY BREAKDOWN:
 
 ---
 
-## For AI Coding Agents (OpenCode / Claude Code / Codex)
+## For AI Coding Agents — Rules & Pitfalls
 
-When you open a module branch, this README is your specification.
-Each module above contains exactly what to implement, which files to touch,
-and a VERIFY step. Follow these rules:
+> **To any LLM reading this (OpenCode, Claude Code, Codex, etc.):**
+> This section is your pre-flight checklist. Read it before touching any `.kt` file.
+> Violating these rules produces code that compiles but silently fails at runtime.
 
-1. **Read the module spec** above before writing any code
-2. **Check the prerequisite modules** exist and work before starting
-3. **Do NOT modify files outside your module's scope** unless noted in INTEGRATION
-4. **All audio code**: 16000 Hz, mono, 16-bit PCM — VOSK REQUIRES these exact values
-5. **All ASR code**: both models must unpack via StorageService.unpack() to filesDir
-6. **All gesture code**: coordinates are absolute screen pixels from getBoundsInScreen()
-7. **No network calls anywhere** — every dependency is local
-8. **Commit with**: `feat(module-X): what you implemented`
-9. **After implementing**, run the VERIFY step and report results
+### Hard Rules (NEVER break these)
+
+1. **AudioRecord MUST be 16000 Hz, CHANNEL_IN_MONO, ENCODING_PCM_16BIT.**
+   VOSK silently produces garbage if these don't match. No exceptions. No "optimizations."
+
+2. **Both VOSK models MUST unpack via `StorageService.unpack()` to `filesDir`.**
+   The Filipino model is 776MB — cannot load from assets at runtime. Check if the
+   unpacked directory exists before unpacking. Show a progress indicator during unpack
+   (it takes 30-60 seconds for the Filipino model on mid-range devices).
+
+3. **Never call `Model()` with an assets path.** Always use the unpacked `filesDir` path.
+
+4. **VOSK Recognizer sample rate must be 16000.0f.** Match it to the AudioRecord rate exactly.
+
+5. **Gesture coordinates are absolute screen pixels** from `getBoundsInScreen(rect)`.
+   Not relative. Not from `getBoundsInParent()`. The Accessibility Service dispatches
+   gestures in absolute screen space.
+
+6. **No network calls. No cloud APIs. No HTTP clients.** Everything is local.
+   If you're about to type `URL`, `HttpURLConnection`, `OkHttp`, or `Retrofit` — STOP.
+   The paper's core claim is "fully offline." Any network call invalidates the thesis.
+
+7. **Six FSM states, not four.** The paper's Conceptual Framework says:
+   `IDLE → LISTENING → PREPROCESSING → TRANSLATING → PROCESSING → EXECUTING`.
+   The older scaffold prompt says 4 states. The paper overrides the prompt.
+   If you find code with 4 states, it's wrong — fix it to 6.
+
+8. **Commit format:** `feat(module-X): short description`. Reference the module letter
+   from the plan above (A through G).
+
+### Known Issues (don't "fix" these)
+
+- **16KB ELF alignment warning on emulator:** `libvosk.so` and `libjnidispatch.so` were
+  compiled with 4KB alignment. Android 15+ wants 16KB. The OS runs the app in
+  "page size compatible mode" — a slight RAM overhead, no functional impact.
+  This is a VOSK native binary limitation. Do NOT attempt to recompile the .so files.
+  This warning does NOT appear on ARM64 physical devices.
+
+- **Filipino model size mismatch:** The paper says ~320MB. The actual model is ~776MB.
+  The paper's estimate was based on the compressed `.zip` size. The unpacked directory
+  on disk is 776MB. This is documented in the paper's limitations as "performance may
+  vary on lower-tier hardware." Do not change the model.
+
+- **VOSK Maven repo goes in `settings.gradle.kts`, not `app/build.gradle.kts`.**
+  The project uses `FAIL_ON_PROJECT_REPOS` — adding repos to the app-level build file
+  will silently fail to resolve. The VOSK repo is already configured correctly in
+  `settings.gradle.kts`. Do not move it.
+
+### Gradle & Build
+
+- **JDK 17 is required.** The project targets Java 17 (`VERSION_17`).
+  If Gradle sync fails with "invalid source release," check your JDK setting in
+  Android Studio → Project Structure → SDK Location → Gradle JDK.
+
+- **compileSdk = 35, minSdk = 30, targetSdk = 35.** Matches the paper's declared
+  Android 11–15 range. Do not change these without updating the manuscript.
+
+- **VOSK dependency version:** `com.alphacephei:vosk-android:0.3.47`.
+  Verify at https://alphacephei.com/vosk/android before locking. If a newer version
+  exists, test it on a physical device before committing the version bump.
+
+### Accessibility Service Gotchas
+
+- **Users must manually enable the Accessibility Service.** You cannot trigger this
+  programmatically. The best you can do is open `Settings.ACTION_ACCESSIBILITY_SETTINGS`
+  and guide the user. Module G handles this UI.
+
+- **SYSTEM_ALERT_WINDOW requires explicit grant on Android 11+.** Use
+  `Settings.ACTION_MANAGE_OVERLAY_PERMISSION`. Again, you can only open Settings —
+  the user must toggle it.
+
+- **Secure screens block accessibility metadata.** Password fields, banking apps,
+  and DRM-protected content intentionally hide their node trees. The DFS locator
+  will return null for these. This is by Android design, not a bug.
+
+- **AccessibilityNodeInfo must be recycled.** Call `node.recycle()` after traversing
+  children to avoid memory leaks. The DFS implementation must handle this.
+
+### Translation & Vocabulary
+
+- **Lexicon JSON format:** `{"entries": {"tagalog_word": "english_word", ...}}`.
+  The `TranslationLayer.fromAssets()` method expects this structure. If you change
+  the JSON format, update the parser too.
+
+- **Tokens not in the lexicon pass through unchanged.** This is intentional —
+  English words don't need translation. Don't add fallback logic that calls an API.
+
+- **Levenshtein threshold starts at 2.** Tune it up (more forgiving) or down
+  (stricter) based on testing. A threshold of 0 means exact match only.
+
+### Pipeline Architecture (do not rearrange)
+
+```
+AudioPreprocessor → VoskSpeechEngine → TranslationLayer → AppStateMachine
+                                                              ↓
+                                        LevenshteinMatcher ←──┘
+                                                              ↓
+                                 HandsFreeAccessibilityService (DfsNodeLocator or dispatchAppLaunch)
+```
+
+The FSM MUST sit between TranslationLayer and the gesture/DFS layer.
+Do not bypass the FSM — it's what enforces sequential command processing.
 
 ---
 
-## For Non-Coding Members
+## For Vocabulary & Research Members
 
-You don't need to write code to contribute. Here's what you can do:
+You don't need to write Kotlin code — your work on the JSON vocabularies and
+participant coordination is equally critical to the project. AI tools (ChatGPT,
+Claude, etc.) can help you generate entries faster.
 
-1. **Build the translation lexicon** — Open `translation-lexicon.json`. Add Tagalog/Taglish words and their English equivalents. Every time we test and a word is missed, add it.
-2. **Build the intent vocabulary** — Open `intent-vocabulary.json`. For each intent (APP_LAUNCH, SMART_SEARCH, etc.), list all the different ways someone might phrase that command in English. Example: for APP_LAUNCH, people might say "open," "launch," "start," "go to," "run."
-3. **Recruit test participants** — Start asking friends and family now if they'd be willing to test the app later. Adults 18+. We also need 1-2 Android developers for expert evaluation.
-4. **Manual testing** — Once there's something to test, speak commands and flag when the app gets it wrong. Take notes on what you said vs what it heard vs what it did.
+### Translation Lexicon (`assets/translation-lexicon.json`)
+
+1. Open the file. It already has 45+ entries as examples.
+2. **Use AI to batch-generate entries.** Prompt example:
+   > "Give me 100 common Tagalog and Taglish words related to phone use
+   > (navigation, apps, messaging, settings). Format each as a JSON key-value
+   > pair: 'tagalog_word': 'english_word'."
+3. Paste the AI output into the `entries` object.
+4. **Review every entry.** AI sometimes hallucinates translations. If you don't
+   know a word, ask a native speaker or cross-check with Google Translate.
+5. After every testing session, add any words VOSK transcribed correctly but the
+   TranslationLayer missed.
+
+### Intent Vocabulary (`assets/intent-vocabulary.json`)
+
+1. This defines HOW people phrase commands. More variations = better matching.
+2. **Use AI to generate phrase variations.** Prompt example:
+   > "List 20 different ways a Filipino English speaker might tell their phone
+   > to open an app. Include natural, casual, and varied phrasing."
+3. Group the output under the correct intent category (`APP_LAUNCH`, `SMART_SEARCH`, etc.).
+4. **Think like a user, not a developer.** People say "open chrome" and "launch browser"
+   and "go to google" and "start chrome app" — they all mean APP_LAUNCH.
+5. Include common mispronunciations and shortcuts that non-technical users might say.
+
+### Participant Recruitment (start early — this takes calendar time)
+
+- **Target:** 10+ adults (18+) who use smartphones regularly.
+- **Method:** Friends, family, classmates. Convenience sampling is acceptable —
+  your paper already describes purposive + snowball sampling.
+- **Expert evaluators:** 1-2 Android developers or IT professionals.
+- Prepare a simple informed consent form (your adviser can review it once contact opens).
+- Schedule testing sessions in advance — don't wait until the app is done to start asking.
+
+### Manual Testing Checklist
+
+Once Phase 1 produces output on screen:
+- [ ] Speak a pure Tagalog command → is the translation correct?
+- [ ] Speak a pure English command → does it pass through unchanged?
+- [ ] Speak a Taglish command → are only the Tagalog parts translated?
+- [ ] Speak with background noise (fan, TV, street) → does VOSK still catch words?
+- [ ] Speak with different accents (if team members have regional accents) → note any failures.
+- [ ] Record what you said, what the screen showed, and whether it was correct.
 
 ---
 
@@ -582,18 +715,6 @@ git push origin dev/module-fsm
 
 **All branch names are in the Module → Branch → Person Mapping table above.**
 Pick the one for the module you're working on.
-
----
-
-## Key Technical Notes
-
-- **VOSK dependency:** `com.alphacephei:vosk-android:0.3.47` (verify latest at https://alphacephei.com/vosk/android)
-- **Audio config:** 16000 Hz sample rate, CHANNEL_IN_MONO, ENCODING_PCM_16BIT — VOSK REQUIRES these exact values
-- **Model unpacking:** Both models MUST be unpacked from assets to internal storage via `StorageService.unpack()` on first launch. The Filipino model takes 30-60 seconds.
-- **FSM has 6 states:** IDLE, LISTENING, PREPROCESSING, TRANSLATING, PROCESSING, EXECUTING (per the paper's Conceptual Framework)
-- **No internet:** Everything runs on-device. No audio leaves the phone. No cloud APIs.
-- **Permission onboarding:** Users must manually enable Accessibility Service in Settings. You CANNOT do this programmatically. Build an onboarding screen that guides them there.
-- **Secure screens:** The app will NOT work on password inputs, banking apps, or DRM content — Android blocks accessibility metadata on those screens by design.
 
 ---
 
