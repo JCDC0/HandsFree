@@ -722,4 +722,4 @@ Pick the one for the module you're working on.
 
 - **VOSK models:** https://alphacephei.com/vosk/models
 - **VOSK Android API:** https://alphacephei.com/vosk/android
-- **Thesis manuscript:** `C:\Users\1carl\Desktop\6 6CISTUDY2\Manuscript HandsFree - ... .pdf`
+- **Thesis manuscript & research files:** https://drive.google.com/drive/folders/1Gi1crm_pcs3NlcXA59gqYYw6cPUDafQa?usp=sharing
