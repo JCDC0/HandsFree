@@ -13,7 +13,40 @@ HandsFree is an offline voice-controlled Android overlay. You speak in Tagalog, 
 
 **Five supported actions:** App Launch, Smart Search, Messaging, Accept Calls, Scheduling.
 
-**Methodology:** RAD (Rapid Application Development) for the Android overlay + CRISP-DM for the intent vocabulary.
+**Methodology:** RAD (Rapid Application Development) for the Android overlay + CRISP-DM for the intent vocabulary ONLY (NOT ASR training — VOSK is pre-trained, per manuscript p.30).
+
+---
+
+## Architecture (Manuscript Figure 4, p.33–36)
+
+The system is organized into **4 functional layers**, each mapping to code in this repo. This is the canonical frame used in the thesis defense — every component traces back to a layer here.
+
+| Layer | Responsibility (per manuscript) | Code in this repo |
+|-------|----------------------------------|-------------------|
+| **1. User Input Layer** | Captures raw spoken commands via device microphone; accepts Tagalog, English, or Taglish with no language-mode selection. No audio leaves the device. | `pipeline/AudioPreprocessor.kt` (mic capture) |
+| **2. HandsFree Overlay Layer** | Core intelligence — 5 sequential processing components (see below). | `pipeline/*` + `service/OverlayService.kt` |
+| **3. Operating System Layer** | Interfaces with the Android Accessibility Service API: retrieves view-hierarchy metadata (labels, types, bounding coords) AND dispatches gesture events. | `service/HandsFreeAccessibilityService.kt` |
+| **4. Target Layer** | The active third-party app that receives simulated gestures. Requires NO modification or developer cooperation — application-agnostic by design. | (any foreground app) |
+
+### Overlay Layer — 5 sequential processing components
+
+```
+Mic ──► 1. Audio Preprocessing ──► 2. Offline ASR (VOSK) ──► 3. Translation Layer
+         (spectral subtraction      (LibriSpeech EN +           (Tagalog/Taglish →
+          + VAD)                    Common Voice Filipino TL)   English lexicon)
+                                                                        │
+                                                                        ▼
+              5. DFS Node Locator ◄── 4. Finite State Machine ◄──────────┘
+              (traverses accessibility   (6 rigid states:
+               node tree → coords)        IDLE→LISTENING→PREPROCESSING
+                                          →TRANSLATING→PROCESSING→EXECUTING)
+                      │
+                      ▼
+              Levenshtein fuzzy matcher + geometric Grid Overlay
+              (two co-equal coordinate-mapping paths)
+```
+
+**Key point:** the Grid Overlay is a **core co-equal mapping path** alongside DFS (manuscript Objective p.20), not a fallback. Both must be implemented and evaluated.
 
 ---
 
@@ -515,12 +548,20 @@ TASKS (overlapping where possible):
   1. Build logging infrastructure (Week 7):
      - Timestamp from voice-input-detection to gesture-executed
      - Log every command: raw transcription, normalized text, intent, success/fail
-     - Log latency per command (ms)
-     - Log memory usage (Runtime.getRuntime().totalMemory() - freeMemory())
+      - Log latency per command (ms)
+      - Log memory usage (Runtime.getRuntime().totalMemory() - freeMemory())
+      - Log translation-layer accuracy: did normalized text match the correct
+        English intent? (first-class metric, manuscript p.28)
 
   2. Quantitative benchmark runs (Week 8):
      - Researchers execute standardized commands (not general users)
-     - Collect: latency (ms), accuracy (correct intents / total), translation ratio
+      - Collect four distinct metrics (manuscript p.28):
+        · End-to-end latency (ms)
+        · Speech-recognition accuracy (correct intents / total)
+        · Translation-layer accuracy (proportion of Tagalog/Taglish inputs correctly
+          normalized to their English intent equivalent BEFORE classification) —
+          this is a FIRST-CLASS metric, distinct from speech-recognition accuracy
+        · Memory consumption
 
   3. Usability testing (Weeks 9–10):
      - Participants use app on their own phones
@@ -529,7 +570,11 @@ TASKS (overlapping where possible):
 
   4. Expert evaluation (Week 10):
      - IT professionals evaluate: architecture, gesture accuracy, offline reliability
-     - 15-item evaluation form (Appendix E)
+      - 15-item evaluation form (Appendix E), organized into 3 named categories
+        (5 items each, per manuscript Appendix E):
+          · Technical Accuracy — voice recognition & gesture execution precision
+          · Mobile Usability & Design Standards — alignment with Android usability standards
+          · Practical Development Utility — fitness for the intended user base
 
   5. Analysis (Weeks 11–12):
      - SPSS for quantitative (descriptive stats, SUS scores)
@@ -686,6 +731,11 @@ Week | Dates        | Coder 1                        | Coder 2                  
 
 - **AccessibilityNodeInfo must be recycled.** Call `node.recycle()` after traversing
   children to avoid memory leaks. The DFS implementation must handle this.
+
+- **Gesture vocabulary is bounded** (manuscript p.22). Supported: single-finger taps,
+  linear swipes, and basic scrolls. EXCLUDED: complex multi-touch such as pinch-to-zoom
+  and multi-finger rotations. Do not implement the excluded gestures — they fall outside
+  the declared scope and would need to be added to the manuscript.
 
 ### Translation & Vocabulary
 
