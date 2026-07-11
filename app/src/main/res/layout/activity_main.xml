@@ -26,6 +26,10 @@
         android:layout_width="match_parent"
         android:layout_height="60dp"
         android:background="#F0F0F0"
+        android:textColor="@android:color/black"
+        android:scrollbars="vertical"
+        android:maxLines="6"
+        android:ellipsize="none"
         android:padding="8dp"
         android:text="..."
         android:layout_marginBottom="12dp" />
@@ -41,6 +45,10 @@
         android:layout_width="match_parent"
         android:layout_height="60dp"
         android:background="#F0F0F0"
+        android:textColor="@android:color/black"
+        android:scrollbars="vertical"
+        android:maxLines="6"
+        android:ellipsize="none"
         android:padding="8dp"
         android:text="..."
         android:layout_marginBottom="24dp" />
@@ -57,5 +65,12 @@
         android:layout_width="200dp"
         android:layout_height="wrap_content"
         android:text="Open Accessibility Settings" />
+
+    <Button
+        android:id="@+id/show_log_button"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Show Last Log" />
 
 </LinearLayout>
