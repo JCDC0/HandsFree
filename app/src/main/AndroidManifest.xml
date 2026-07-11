@@ -37,7 +37,11 @@
         <service
             android:name=".service.OverlayService"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Offline voice-control overlay for hands-free navigation" />
+        </service>
 
         <!-- Main launcher activity (settings / onboarding / debug) -->
         <activity

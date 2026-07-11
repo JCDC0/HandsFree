@@ -1,6 +1,13 @@
 package com.example.handsfree.pipeline
 
 import android.content.Context
+import android.util.Log
+import org.vosk.Model
+import org.vosk.Recognizer
+import org.vosk.android.StorageService
+import org.json.JSONObject
+import java.io.File
+import java.io.IOException
 
 /**
  * Wraps the VOSK Android library for offline speech recognition.
@@ -13,28 +20,58 @@ import android.content.Context
  */
 class VoskSpeechEngine(private val context: Context) {
 
-    // TODO: Model paths in internal storage after unpacking
-    private var englishModelPath: String = ""
-    private var filipinoModelPath: String = ""
+    var onReady: (() -> Unit)? = null
+    var onError: ((IOException) -> Unit)? = null
+
+    private var model: Model? = null
+    private var recognizer: Recognizer? = null
+    private var modelPath: String = ""
 
     /**
      * Unpacks VOSK models from assets to internal storage if not already present.
      * The Filipino model (~776MB) is too large to load directly from assets.
-     * Call this once during app initialization.
+     * Call this once during app initialization. On success, the returned [Model]
+     * is stored and [onReady] is invoked; on failure [onError] is invoked.
      */
     fun unpackModelsIfNeeded() {
-        // TODO: Check if model directories exist in filesDir
-        // TODO: If not, call StorageService.unpack(context, "vosk-model-small-en-us-0.15", ...)
-        // TODO: Same for vosk-model-tl-ph-generic-0.6
-        // TODO: Show progress indicator (the Filipino model unpack takes 30-60 seconds)
+        val enDir = File(context.filesDir, "vosk-model-small-en-us-0.15")
+        if (!enDir.exists()) {
+            StorageService.unpack(
+                context,
+                "vosk-model-small-en-us-0.15",
+                enDir.absolutePath,
+                object : StorageService.Callback<Model> {
+                    override fun onComplete(model: Model) {
+                        this@VoskSpeechEngine.model = model
+                        initRecognizer()
+                        onReady?.invoke()
+                    }
+                },
+                object : StorageService.Callback<IOException> {
+                    override fun onComplete(error: IOException) {
+                        Log.e(TAG, "Unpack failed", error)
+                        onError?.invoke(error)
+                    }
+                }
+            )
+        } else {
+            // Model already unpacked on a previous launch — load it directly.
+            initRecognizer()
+            onReady?.invoke()
+        }
     }
 
     /**
-     * Initialize VOSK Recognizer with the specified model (English or Filipino).
-     * @param language "en" or "tl" — selects which unpacked model to load
+     * Initialize VOSK Recognizer. If the [Model] was already supplied by
+     * [StorageService.unpack] (stored in [model]), it is reused; otherwise the
+     * model is loaded from disk by path.
      */
-    fun initRecognizer(language: String) {
-        // TODO: Model(modelPath), Recognizer(model, 16000.0f)
+    fun initRecognizer(language: String = "en") {
+        modelPath = File(context.filesDir, "vosk-model-small-en-us-0.15").absolutePath
+        if (model == null) {
+            model = Model(modelPath)
+        }
+        recognizer = Recognizer(model, 16000.0f)
     }
 
     /**
@@ -42,8 +79,11 @@ class VoskSpeechEngine(private val context: Context) {
      * transcribed text if a complete utterance was recognized, or null.
      */
     fun acceptWaveform(buffer: ShortArray): String? {
-        // TODO: recognizer.acceptWaveForm(buffer, buffer.size)
-        // TODO: If true, return recognizer.result
+        val isFinal = recognizer!!.acceptWaveForm(buffer, buffer.size)
+        if (isFinal) {
+            val text = JSONObject(recognizer!!.result).optString("text", "").trim()
+            return text.ifEmpty { null }
+        }
         return null
     }
 
@@ -51,6 +91,13 @@ class VoskSpeechEngine(private val context: Context) {
      * Release the VOSK Recognizer and Model resources.
      */
     fun release() {
-        // TODO: recognizer.close(), model.close()
+        recognizer?.close()
+        model?.close()
+        recognizer = null
+        model = null
+    }
+
+    companion object {
+        private const val TAG = "VoskSpeechEngine"
     }
 }
