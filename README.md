@@ -50,6 +50,31 @@ Mic ──► 1. Audio Preprocessing ──► 2. Offline ASR (VOSK) ──► 3
 
 ---
 
+## Current Status (July 2026)
+
+### Pipeline
+- **Phase 1 core pipeline: BUILDING AND RUNNING** on physical device (Tecno Pova 7 Ultra 5G, Android 15).
+- **Working:** `AudioPreprocessor` (mic capture + VAD), `VoskSpeechEngine` (English model unpack + init + transcription), live partial captions, start/stop toggle, crash diagnostics with log viewer.
+- **Stub:** `TranslationLayer` is passthrough only (Harold to implement real `normalize()`).
+- **Not yet tested:** Filipino VOSK model.
+
+### Member Next Steps
+- **JC**: implement Filipino model support + fix one-word transcription lag
+- **Harold**: implement real `TranslationLayer.normalize()` using the lexicon JSON
+- **Karl**: expand `translation-lexicon.json` entries + `intent-vocabulary.json` phrases
+- **Baguio**: update thesis methodology docs to reflect implemented architecture
+
+### Phase 1 Task Status
+| Task | Component | Status |
+|------|-----------|--------|
+| 1.1 | AudioPreprocessor (mic + VAD) | **DONE** |
+| 1.2 | VoskSpeechEngine (EN model, unpack + init + transcription) | **DONE** |
+| 1.3 | TranslationLayer (lexicon normalize) | **IN PROGRESS** (stub complete, real logic pending) |
+| 1.4 | Pipeline Wiring (OverlayService → MainActivity) | **DONE** |
+| 1.5 | Vocabulary Seeding (lexicon + intent-vocabulary JSON) | **ONGOING** |
+
+---
+
 ## Before You Start — Required Downloads (EVERY MEMBER)
 
 You need two large model files. They are NOT in this repo (GitHub rejects files >100MB).

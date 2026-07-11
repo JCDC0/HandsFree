@@ -27,27 +27,35 @@ class VoskSpeechEngine(private val context: Context) {
     private var model: Model? = null
     private var recognizer: Recognizer? = null
     private var modelPath: String = ""
+    /** Currently active language code ("en" or "tl"). */
+    var activeLanguage: String = "en"
+        private set
 
     /**
      * Unpacks VOSK models from assets to internal storage if not already present.
      * The Filipino model (~776MB) is too large to load directly from assets.
-     * Call this once during app initialization. On success, the returned [Model]
-     * is stored and [onReady] is invoked; on failure [onError] is invoked.
+     * Call this once during app initialization, then again when switching models.
+     *
+     * @param language "en" (default, ~40MB English model) or "tl" (Filipino ~776MB).
+     *                 On success, the [Model] is stored and [onReady] is invoked;
+     *                 on failure [onError] is invoked.
      */
-    fun unpackModelsIfNeeded() {
-        val enDir = File(context.filesDir, "vosk-model-small-en-us-0.15")
-        if (!enDir.exists()) {
+    fun unpackModelsIfNeeded(language: String = "en") {
+        val modelDirName = dirNameFor(language)
+        val targetDir = File(context.filesDir, modelDirName)
+        if (!targetDir.exists()) {
+            CrashLog.info(context, "unpacking model $language -> ${targetDir.absolutePath}")
             StorageService.unpack(
                 context,
-                "vosk-model-small-en-us-0.15",
-                enDir.absolutePath,
+                modelDirName,
+                targetDir.absolutePath,
                 object : StorageService.Callback<Model> {
                     override fun onComplete(model: Model) {
                         this@VoskSpeechEngine.model = model
                         try {
-                            initRecognizer()
+                            initRecognizer(language)
                         } catch (e: Throwable) {
-                            Log.e(TAG, "initRecognizer failed after unpack", e)
+                            Log.e(TAG, "initRecognizer failed after unpack ($language)", e)
                             onError?.invoke(e)
                             return
                         }
@@ -56,7 +64,7 @@ class VoskSpeechEngine(private val context: Context) {
                 },
                 object : StorageService.Callback<IOException> {
                     override fun onComplete(error: IOException) {
-                        Log.e(TAG, "Unpack failed", error)
+                        Log.e(TAG, "Unpack failed ($language)", error)
                         onError?.invoke(error)
                     }
                 }
@@ -64,9 +72,9 @@ class VoskSpeechEngine(private val context: Context) {
         } else {
             // Model already unpacked on a previous launch — load it directly.
             try {
-                initRecognizer()
+                initRecognizer(language)
             } catch (e: Throwable) {
-                Log.e(TAG, "initRecognizer failed on cached model", e)
+                Log.e(TAG, "initRecognizer failed on cached model ($language)", e)
                 onError?.invoke(e)
                 return
             }
@@ -85,8 +93,16 @@ class VoskSpeechEngine(private val context: Context) {
      * host service.
      */
     fun initRecognizer(language: String = "en") {
-        modelPath = File(context.filesDir, "vosk-model-small-en-us-0.15").absolutePath
-        CrashLog.step(context, "STEP_7: Model/Recognizer init START (modelPath=$modelPath)")
+        val previousLanguage = activeLanguage
+        activeLanguage = language
+        modelPath = File(context.filesDir, dirNameFor(language)).absolutePath
+        CrashLog.step(context, "STEP_7: Model/Recognizer init START (lang=$language modelPath=$modelPath)")
+        // When switching to a different language, drop the cached Model — it
+        // points at the other model's directory and must not be reused.
+        if (model != null && language != previousLanguage) {
+            runCatching { model!!.close() }
+            model = null
+        }
         try {
             if (model == null) {
                 model = Model(modelPath)
@@ -96,6 +112,8 @@ class VoskSpeechEngine(private val context: Context) {
             Log.e(TAG, "VOSK Model() failed: ${e.message}", e)
             throw e
         }
+        // Always rebuild the Recognizer so it binds to the active Model.
+        runCatching { recognizer?.close() }
         try {
             recognizer = Recognizer(model, 16000.0f)
         } catch (e: Throwable) {
@@ -103,7 +121,31 @@ class VoskSpeechEngine(private val context: Context) {
             Log.e(TAG, "VOSK Recognizer() failed: ${e.message}", e)
             throw e
         }
-        CrashLog.ok(context, "STEP_8: Model/Recognizer init DONE")
+        CrashLog.ok(context, "STEP_8: Model/Recognizer init DONE (lang=$language)")
+    }
+
+    /**
+     * Switch the active recognizer to [language] ("en" or "tl"). Unpacks the
+     * model from assets on first use, then re-initializes the [Model] and
+     * [Recognizer]. Safe to call while a pipeline is running — the caller
+     * ([OverlayService.switchModel]) is responsible for stopping/restarting
+     * mic capture around this call so no audio is lost mid-switch.
+     *
+     * Invokes [onReady] on success or [onError] on failure (same contract as
+     * [unpackModelsIfNeeded]).
+     */
+    fun switchModel(language: String) {
+        if (language != "en" && language != "tl") {
+            Log.w(TAG, "switchModel: unknown language '$language' — ignoring")
+            return
+        }
+        if (language == activeLanguage && recognizer != null) {
+            Log.i(TAG, "switchModel: already on '$language' — nothing to do")
+            onReady?.invoke()
+            return
+        }
+        Log.i(TAG, "switchModel: $activeLanguage -> $language")
+        unpackModelsIfNeeded(language)
     }
 
     /**
@@ -146,5 +188,16 @@ class VoskSpeechEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "VoskSpeechEngine"
+
+        /** Internal-storage directory name for the small English model. */
+        const val EN_MODEL_DIR = "vosk-model-small-en-us-0.15"
+        /** Internal-storage directory name for the Filipino generic model. */
+        const val TL_MODEL_DIR = "vosk-model-tl-ph-generic-0.6"
+
+        /** Map a language code ("en"/"tl") to its unpacked model directory name. */
+        fun dirNameFor(language: String): String = when (language) {
+            "tl" -> TL_MODEL_DIR
+            else -> EN_MODEL_DIR
+        }
     }
 }

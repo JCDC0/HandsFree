@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
@@ -37,6 +39,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var startButton: Button
     private lateinit var permButton: Button
     private lateinit var showLogButton: Button
+    private lateinit var modelButton: Button
+
+    /** Currently selected VOSK model — toggled by [modelButton]. */
+    private var currentLanguage: String = "en"
 
     /**
      * Previous handler captured so we can delegate after logging our own crash
@@ -48,6 +54,13 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     /** True while the foreground service + mic capture are running. Drives the
      *  start/stop toggle label and guards against double-starts. */
     private var pipelineActive = false
+
+    /** Clears transient error messages after a short delay. */
+    private val errorClearHandler = Handler(Looper.getMainLooper())
+    private val errorClearRunnable = Runnable {
+        statusText.setTextColor(Color.BLACK)
+        statusText.text = "..."
+    }
 
     private val requestAudioPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -70,6 +83,24 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startButton = findViewById(R.id.start_button)
         permButton = findViewById(R.id.perm_button)
         showLogButton = findViewById(R.id.show_log_button)
+        modelButton = findViewById(R.id.model_button)
+
+        // Fresh start: clear all text, reset model to EN, reset state
+        transcribedText.text = "..."
+        translatedText.text = "..."
+        statusText.text = "Ready — tap Start Mic & VOSK"
+        statusText.setTextColor(Color.BLACK)
+        currentLanguage = "en"
+        modelButton.text = "Model: EN"
+        pipelineActive = false
+        startButton.text = "Start Mic & VOSK"
+        startButton.isEnabled = true
+        // If service is lingering from a previous session, force it to EN
+        val resetIntent = Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_SWITCH_MODEL
+            putExtra(OverlayService.EXTRA_LANGUAGE, "en")
+        }
+        startService(resetIntent)
 
         startButton.setOnClickListener {
             if (pipelineActive) {
@@ -79,6 +110,11 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             } else {
                 requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
             }
+        }
+
+        modelButton.setOnClickListener {
+            val newLang = if (currentLanguage == "en") "tl" else "en"
+            switchModel(newLang)
         }
 
         permButton.setOnClickListener {
@@ -138,6 +174,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         if (OverlayService.pipelineListener === this) {
             OverlayService.pipelineListener = null
         }
+        errorClearHandler.removeCallbacks(errorClearRunnable)
     }
 
     private fun hasRecordAudioPermission(): Boolean =
@@ -162,6 +199,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private fun startOverlayService() {
         val intent = Intent(this, OverlayService::class.java).apply {
             action = OverlayService.ACTION_START
+            putExtra(OverlayService.EXTRA_LANGUAGE, currentLanguage)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -186,6 +224,21 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startButton.text = "Start Mic & VOSK"
         transcribedText.text = "..."
         translatedText.text = "..."
+    }
+
+    private fun switchModel(language: String) {
+        currentLanguage = language
+        modelButton.text = if (language == "en") "Model: EN" else "Model: TL"
+        val intent = Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_SWITCH_MODEL
+            putExtra(OverlayService.EXTRA_LANGUAGE, language)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+        Toast.makeText(this, "Switching to ${language.uppercase()} model...", Toast.LENGTH_SHORT).show()
     }
 
     // ---- OverlayService.PipelineListener ----
@@ -214,6 +267,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     startButton.text = "Stop Listening"
                     pipelineActive = true
                 }
+                "SWITCHING_MODEL" -> {
+                    startButton.isEnabled = false
+                }
                 "STOPPED", "IDLE", "MODEL_ERROR" -> {
                     startButton.isEnabled = true
                     startButton.text = "Start Mic & VOSK"
@@ -225,8 +281,14 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     override fun onPipelineError(message: String) {
         runOnUiThread {
-            statusText.setTextColor(Color.RED)
+            // Transient errors during startup (e.g. VOSK model loading) should
+            // not flash red while the pipeline is still PREPARING.
+            if (statusText.text != "PREPARING") {
+                statusText.setTextColor(Color.RED)
+            }
             statusText.text = message
+            errorClearHandler.removeCallbacks(errorClearRunnable)
+            errorClearHandler.postDelayed(errorClearRunnable, 3000L)
         }
     }
 }

@@ -204,11 +204,45 @@ class OverlayService : Service() {
         Log.i(TAG, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_STOP_PIPELINE -> stopPipeline()
-            ACTION_START -> startPipeline()
+            ACTION_START -> {
+                val lang = intent?.getStringExtra(EXTRA_LANGUAGE)
+                if (lang != null && lang != voskSpeechEngine.activeLanguage) {
+                    switchModel(lang)
+                } else {
+                    startPipeline()
+                }
+            }
+            ACTION_SWITCH_MODEL -> {
+                val lang = intent?.getStringExtra(EXTRA_LANGUAGE) ?: "en"
+                switchModel(lang)
+            }
         }
         // Phase 1: the pipeline auto-starts in onCreate. START_STICKY keeps the
         // service alive across low-memory circumstances so the mic stays open.
         return START_STICKY
+    }
+
+    /**
+     * Switch the active VOSK model to [language] ("en" or "tl"). If the
+     * pipeline is currently running, capture is stopped first and restarted
+     * once the new recognizer is ready, so no audio is processed against the
+     * stale model mid-switch.
+     */
+    fun switchModel(language: String) {
+        CrashLog.info(this, "switchModel: -> $language")
+        val wasRunning = pipelineRunning
+        if (wasRunning) stopPipeline()
+        emitStatus("SWITCHING_MODEL")
+        // Reuse the onReady/onError hooks — they fire after the new Model is
+        // built. onReady will restart the pipeline if it was running before.
+        val previousOnReady = voskSpeechEngine.onReady
+        voskSpeechEngine.onReady = {
+            CrashLog.info(this@OverlayService, "switchModel onReady: $language")
+            emitStatus("LISTENING")
+            if (wasRunning) startPipeline() else emitStatus("STOPPED")
+            voskSpeechEngine.onReady = previousOnReady
+        }
+        voskSpeechEngine.switchModel(language)
     }
 
     override fun onDestroy() {
@@ -272,6 +306,10 @@ class OverlayService : Service() {
         const val ACTION_STOP_PIPELINE = "com.example.handsfree.STOP_PIPELINE"
         /** Intent action (informational) that explicitly requests start. */
         const val ACTION_START = "com.example.handsfree.START"
+        /** Intent action that switches the active VOSK model (EN ↔ TL). */
+        const val ACTION_SWITCH_MODEL = "com.example.handsfree.SWITCH_MODEL"
+        /** Extra key carrying the language code ("en" or "tl") for [ACTION_SWITCH_MODEL]. */
+        const val EXTRA_LANGUAGE = "language"
 
         /**
          * The currently registered [PipelineListener], if any. The activity

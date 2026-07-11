@@ -27,8 +27,10 @@ class TranslationLayer private constructor(private val lexicon: Map<String, Stri
      * @return Normalized English string ready for intent classification
      */
     fun normalize(transcribed: String): String {
-        // STUB (Phase 1): passthrough per phase1-plan.md decision #4.
-        return transcribed
+        if (transcribed.isBlank()) return transcribed
+        return transcribed.trim().split(Regex("\\s+")).joinToString(" ") { token ->
+            lexicon[token.lowercase()] ?: token
+        }
     }
 
     /**
