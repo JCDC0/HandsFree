@@ -1,6 +1,9 @@
 package com.example.handsfree
 
 import android.Manifest
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -15,27 +18,29 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.service.OverlayService
 import com.example.handsfree.util.CrashLog
-import android.app.AlertDialog
-import android.content.ClipData
-import android.content.ClipboardManager
 
 /**
  * Main launcher activity for HandsFree.
  *
- * Phase 1 (current): Simple debug screen showing transcribed and translated text
- * produced by the pipeline hosted in [OverlayService]. The activity registers
- * itself as the [OverlayService.PipelineListener] while it is resumed.
+ * Debug screen showing the full pipeline result:
+ *   - Raw transcription from VOSK
+ *   - Tagalog→English translation from TranslationLayer
+ *   - Detected intent from LevenshteinMatcher
  *
- * Phase 2: Onboarding flow for Accessibility Service and overlay permissions
- * (Module G).
+ * The activity registers itself as the [OverlayService.PipelineListener]
+ * while it is resumed and loads the intent vocabulary for local display.
+ * Phase 2 adds the onboarding flow for Accessibility Service and overlay
+ * permissions (Module G).
  */
 class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     private lateinit var statusText: TextView
     private lateinit var transcribedText: TextView
     private lateinit var translatedText: TextView
+    private lateinit var intentText: TextView
     private lateinit var startButton: Button
     private lateinit var permButton: Button
     private lateinit var showLogButton: Button
@@ -62,6 +67,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         statusText.text = "..."
     }
 
+    /** Levenshtein-based intent classifier loaded from intent-vocabulary.json. */
+    private var levenshteinMatcher: LevenshteinMatcher? = null
+
     private val requestAudioPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
@@ -80,14 +88,22 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         statusText = findViewById(R.id.status_text)
         transcribedText = findViewById(R.id.transcribed_text)
         translatedText = findViewById(R.id.translated_text)
+        intentText = findViewById(R.id.intent_text)
         startButton = findViewById(R.id.start_button)
         permButton = findViewById(R.id.perm_button)
         showLogButton = findViewById(R.id.show_log_button)
         modelButton = findViewById(R.id.model_button)
 
+        // Load LevenshteinMatcher for intent display in the debug UI
+        levenshteinMatcher = runCatching {
+            val json = assets.open("intent-vocabulary.json").bufferedReader().use { it.readText() }
+            LevenshteinMatcher.fromAssets(json)
+        }.getOrNull()
+
         // Fresh start: clear all text, reset model to EN, reset state
         transcribedText.text = "..."
         translatedText.text = "..."
+        intentText.text = "—"
         statusText.text = "Ready — tap Start Mic & VOSK"
         statusText.setTextColor(Color.BLACK)
         currentLanguage = "en"
@@ -245,8 +261,16 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     override fun onTranscriptionResult(rawTranscribed: String, normalized: String) {
         runOnUiThread {
-            transcribedText.text = rawTranscribed
-            translatedText.text = normalized
+            transcribedText.text = rawTranscribed.ifBlank { "—" }
+            translatedText.text = normalized.ifBlank { "—" }
+
+            // Run intent classification and show result in debug UI
+            val match = levenshteinMatcher?.classify(normalized)
+            intentText.text = if (match != null) {
+                "${match.first}  (matched: \"${match.second}\")"
+            } else {
+                "No match"
+            }
         }
     }
 

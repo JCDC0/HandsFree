@@ -35,12 +35,11 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
+    implementation(libs.androidx.cardview)
     // VOSK offline speech recognition (verify latest at https://alphacephei.com/vosk/android)
     implementation("com.alphacephei:vosk-android:0.3.47")
     // Coroutines for background audio/VOSK pipeline work
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    // Kotlin coroutines for audio capture loop
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -10,32 +10,52 @@ import org.json.JSONObject
  *
  * Tokens not found in the lexicon pass through unchanged (assumed already
  * English). The lexicon lives in `assets/translation-lexicon.json`.
- *
- * -----
- * PHASE 1 STATUS: **STUB — passthrough.** [normalize] returns its input
- * unchanged. Harold will implement the real token-replacement logic later;
- * the lexicon is parsed into a [Map] here so that lookup is ready to drop in.
  */
 class TranslationLayer private constructor(private val lexicon: Map<String, String>) {
 
     /**
      * Normalize a transcribed Tagalog/Taglish string to English.
      *
-     * Phase 1: passthrough — input is returned unchanged.
+     * Tokenizes on whitespace, lowercases each token, looks it up in the
+     * bilingual lexicon, replaces matched tokens with their English equivalents,
+     * and rejoins. Unmatched tokens pass through unchanged.
+     *
+     * Multi-word lexicon entries (e.g. "mga setting" → "settings") are matched
+     * greedily left-to-right with a 2-token lookahead before falling back to
+     * single-token lookup.
      *
      * @param transcribed Raw text from VOSK (may contain Tagalog, English, or Taglish)
      * @return Normalized English string ready for intent classification
      */
     fun normalize(transcribed: String): String {
         if (transcribed.isBlank()) return transcribed
-        return transcribed.trim().split(Regex("\\s+")).joinToString(" ") { token ->
-            lexicon[token.lowercase()] ?: token
+
+        val tokens = transcribed.trim().lowercase().split("\\s+".toRegex())
+        val result = mutableListOf<String>()
+        var i = 0
+
+        while (i < tokens.size) {
+            // Greedy 2-token lookahead for multi-word entries (e.g. "mga setting")
+            if (i + 1 < tokens.size) {
+                val bigram = "${tokens[i]} ${tokens[i + 1]}"
+                val bigramTranslation = lexicon[bigram]
+                if (bigramTranslation != null) {
+                    result.add(bigramTranslation)
+                    i += 2
+                    continue
+                }
+            }
+            // Single-token lookup
+            val translation = lexicon[tokens[i]]
+            result.add(translation ?: tokens[i])
+            i++
         }
+
+        return result.joinToString(" ")
     }
 
     /**
-     * Look up a single lowercased token in the lexicon. For Harold's future
-     * replacement implementation; not used by the stub.
+     * Look up a single lowercased token in the lexicon.
      *
      * @return the English equivalent, or `null` if the token is not found.
      */
@@ -48,7 +68,7 @@ class TranslationLayer private constructor(private val lexicon: Map<String, Stri
         /**
          * Load the translation lexicon from `assets/translation-lexicon.json`.
          *
-         * Expected JSON shape (already present in the repo):
+         * Expected JSON shape:
          * ```
          * { "entries": { "buksan": "open", "tumawag": "call", ... } }
          * ```
