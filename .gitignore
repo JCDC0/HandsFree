@@ -15,6 +15,10 @@
 .cxx
 local.properties
 
+# Local editor / IDE caches (VS Code, Kotlin daemon)
+.vscode/
+.kotlin/
+
 # VOSK model files — too large for Git (>100MB limit)
 # Each member must download manually (see README.md)
 app/src/main/assets/vosk-model-small-en-us-0.15/
