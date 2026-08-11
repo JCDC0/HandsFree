@@ -70,6 +70,44 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     /** Levenshtein-based intent classifier loaded from intent-vocabulary.json. */
     private var levenshteinMatcher: LevenshteinMatcher? = null
 
+    /**
+     * Shown while the speech model loads. First launch unpacks a model from
+     * assets, which can take several seconds — without this the app looks
+     * frozen and testers tap Start repeatedly.
+     */
+    private var loadingDialog: AlertDialog? = null
+
+    private fun showLoading(message: String) {
+        runOnUiThread {
+            if (loadingDialog?.isShowing == true) {
+                loadingDialog?.setMessage(message); return@runOnUiThread
+            }
+            val bar = android.widget.ProgressBar(this).apply { setPadding(48, 48, 48, 24) }
+            val label = TextView(this).apply {
+                text = message
+                textSize = 15f
+                setPadding(48, 8, 48, 48)
+                gravity = android.view.Gravity.CENTER
+            }
+            val box = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                addView(bar); addView(label)
+            }
+            loadingDialog = AlertDialog.Builder(this)
+                .setView(box)
+                .setCancelable(false)
+                .create()
+                .also { it.show() }
+        }
+    }
+
+    private fun hideLoading() {
+        runOnUiThread {
+            runCatching { loadingDialog?.dismiss() }
+            loadingDialog = null
+        }
+    }
+
     private val requestAudioPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
@@ -109,7 +147,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         currentLanguage = "en"
         modelButton.text = "Model: EN"
         pipelineActive = false
-        startButton.text = "Start Mic & VOSK"
+        startButton.text = "Start Listening"
         startButton.isEnabled = true
         // If service is lingering from a previous session, force it to EN
         val resetIntent = Intent(this, OverlayService::class.java).apply {
@@ -193,13 +231,19 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         errorClearHandler.removeCallbacks(errorClearRunnable)
     }
 
+    override fun onDestroy() {
+        // A dialog still attached to a finishing activity leaks its window.
+        hideLoading()
+        super.onDestroy()
+    }
+
     private fun hasRecordAudioPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
     /**
      * Reflect missing permissions / overlay grant in the status TextView so the
-     * user knows what to fix before tapping "Start Mic & VOSK".
+     * user knows what to fix before tapping "Start Listening".
      */
     private fun updatePermissionStatus() {
         val missing = mutableListOf<String>()
@@ -237,7 +281,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         }
         startService(intent)
         pipelineActive = false
-        startButton.text = "Start Mic & VOSK"
+        startButton.text = "Start Listening"
         transcribedText.text = "..."
         translatedText.text = "..."
     }
@@ -286,20 +330,47 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         runOnUiThread {
             statusText.text = status
             when (status) {
+                "PREPARING" -> showLoading("Loading speech model…\nFirst launch unpacks it — this can take a few seconds.")
+                "SWITCHING_MODEL" -> {
+                    startButton.isEnabled = false
+                    showLoading("Switching model…")
+                }
                 "LISTENING" -> {
+                    hideLoading()
                     startButton.isEnabled = true
                     startButton.text = "Stop Listening"
                     pipelineActive = true
+                    statusText.setTextColor(Color.parseColor("#1E88E5"))
+                    statusText.text = "Listening — speak your command"
                 }
-                "SWITCHING_MODEL" -> {
-                    startButton.isEnabled = false
-                }
-                "STOPPED", "IDLE", "MODEL_ERROR" -> {
+                "STOPPED", "IDLE" -> {
+                    hideLoading()
                     startButton.isEnabled = true
-                    startButton.text = "Start Mic & VOSK"
-                    if (status != "MODEL_ERROR") pipelineActive = false
+                    startButton.text = "Start Listening"
+                    pipelineActive = false
+                    statusText.setTextColor(Color.BLACK)
+                    statusText.text = getString(R.string.activator_hint)
+                }
+                "MODEL_ERROR" -> {
+                    hideLoading()
+                    startButton.isEnabled = true
+                    startButton.text = "Start Listening"
+                    statusText.setTextColor(Color.RED)
                 }
             }
+        }
+    }
+
+    /**
+     * Report whether the matched command actually did anything. Without this
+     * the debug UI shows a correct intent while nothing happens on screen,
+     * which is indistinguishable from a recognition failure during testing.
+     */
+    override fun onCommandExecuted(intent: String, success: Boolean, message: String) {
+        runOnUiThread {
+            intentText.text = if (success) "$intent — $message" else "$intent — FAILED: $message"
+            intentText.setTextColor(if (success) Color.parseColor("#2E7D32") else Color.RED)
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
     }
 
