@@ -23,3 +23,6 @@ local.properties
 # Each member must download manually (see README.md)
 app/src/main/assets/vosk-model-small-en-us-0.15/
 app/src/main/assets/vosk-model-tl-ph-generic-0.6/
+
+# Claude Code project memory - local only, contains frank status notes
+CLAUDE.md
