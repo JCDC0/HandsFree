@@ -137,11 +137,15 @@ class OverlayService : Service() {
      * app switches over with no other change.
      */
     private fun createEngine(): SpeechEngine =
-        if (WhisperOnnxEngine.MODEL_PRESENT) {
+        if (WhisperOnnxEngine.USABLE) {
             Log.i(TAG, "using Whisper ONNX engine")
             WhisperOnnxEngine(this)
         } else {
-            Log.i(TAG, "Whisper assets absent — falling back to VOSK")
+            Log.i(
+                TAG,
+                "Whisper not usable (present=${WhisperOnnxEngine.MODEL_PRESENT} " +
+                    "implemented=${WhisperOnnxEngine.INFERENCE_IMPLEMENTED}) — using VOSK"
+            )
             VoskEngineAdapter(this)
         }
 

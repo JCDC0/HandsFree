@@ -40,6 +40,8 @@ dependencies {
     implementation("com.alphacephei:vosk-android:0.3.47")
     // Coroutines for background audio/VOSK pipeline work
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // ONNX Runtime for the fine-tuned Whisper-tiny model (see CLAUDE.md 5)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

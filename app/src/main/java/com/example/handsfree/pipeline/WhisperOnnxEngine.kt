@@ -182,10 +182,72 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
         private const val TAG = "WhisperOnnx"
 
         /**
-         * Flip to true once the three ONNX artefacts are in assets/whisper/.
-         * Until then the app falls back to VOSK so the pipeline stays testable.
+         * True once the three ONNX artefacts are in assets/whisper/.
+         * Set 2026-08-12 when Karl's export landed.
          */
-        const val MODEL_PRESENT = false
+        const val MODEL_PRESENT = true
+
+        /**
+         * Gate on the engine actually working, separate from the assets being
+         * bundled.
+         *
+         * The model files are present, but [flushAndTranscribe] is still a stub
+         * returning null. If the app selected Whisper on [MODEL_PRESENT] alone
+         * it would load happily, report ready, and then transcribe nothing —
+         * strictly worse than VOSK, which works.
+         *
+         * FLIP THIS TO TRUE only after a real .wav has been transcribed
+         * end to end and the output matches Karl's notebook for that file.
+         */
+        const val INFERENCE_IMPLEMENTED = false
+
+        /** Whisper is usable only when both are true. */
+        val USABLE: Boolean get() = MODEL_PRESENT && INFERENCE_IMPLEMENTED
+
+        // ------------------------------------------------------------------
+        // Token IDs — read directly from the fine-tuned model's
+        // generation_config.json. Do NOT guess these; Whisper's language token
+        // ordering is not obvious and a wrong id produces fluent output in the
+        // wrong language, which is very easy to mistake for a bad model.
+        // ------------------------------------------------------------------
+
+        /** <|startoftranscript|> */
+        const val TOKEN_SOT = 50258
+
+        /** <|tl|> — Tagalog. Verified against generation_config lang_to_id. */
+        const val TOKEN_LANG_TL = 50348
+
+        /** <|transcribe|>. NOT <|translate|> (50358) — translate would emit English. */
+        const val TOKEN_TRANSCRIBE = 50359
+
+        /** <|notimestamps|> */
+        const val TOKEN_NO_TIMESTAMPS = 50363
+
+        /** <|endoftext|>, also the pad token. Stop decoding here. */
+        const val TOKEN_EOT = 50257
+
+        /** Forced decoder prefix, in order. */
+        val FORCED_PREFIX = intArrayOf(TOKEN_SOT, TOKEN_LANG_TL, TOKEN_TRANSCRIBE, TOKEN_NO_TIMESTAMPS)
+
+        /** generation_config.max_length. */
+        const val MAX_DECODE_TOKENS = 448
+
+        /**
+         * tokens.txt covers ids 0..50256 only — the 1,608 special tokens above
+         * that are absent. This is fine: those ids are never emitted as text.
+         * When detokenising, skip any id >= [TOKEN_EOT].
+         *
+         * Entries are `<base64> <id>` per line; base64-decode to UTF-8.
+         */
+        const val TOKENS_MAX_TEXT_ID = 50256
+
+        // Front-end constants, from the model's preprocessor_config.json.
+        const val N_MELS = 80
+        const val N_FFT = 400
+        const val HOP_LENGTH = 160
+        const val CHUNK_SECONDS = 30
+        const val MEL_FRAMES = 3000        // 30 s * 16000 / 160
+        const val ENCODER_FRAMES = 1500    // config.max_source_positions
 
         const val ASSET_DIR = "whisper"
         const val ENCODER_FILE = "encoder.onnx"
