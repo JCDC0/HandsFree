@@ -51,7 +51,17 @@ class LevenshteinMatcher(private val vocabulary: JSONObject) {
 
             for (j in 0 until phrasesArray.length()) {
                 val phrase = phrasesArray.optString(j).lowercase()
-                val distance = levenshteinDistance(normalizedInput, phrase)
+                
+                var distance = if (normalizedInput.contains(phrase)) {
+                    0
+                } else {
+                    val matchLen = minOf(normalizedInput.length, phrase.length)
+                    val prefix = normalizedInput.substring(0, matchLen)
+                    val distPrefix = levenshteinDistance(prefix, phrase)
+                    val distFull = levenshteinDistance(normalizedInput, phrase)
+                    minOf(distPrefix, distFull)
+                }
+
                 if (distance < bestDistance) {
                     bestDistance = distance
                     bestCategory = category
