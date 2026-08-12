@@ -335,10 +335,44 @@ and documented as a constraint in `CLAUDE.md`.
    strictly further away before accepting a match — is not implemented. This is
    the clearest direction for future work arising from the implementation.
 
-10. **The lexicon is hand-maintained and device-specific.** 340 entries derived
-    from this project's own voice-test logs on one device with a small number of
-    speakers. Generalization to other speakers, accents and microphones is
-    unmeasured, and lexicon growth is the system's main maintenance burden.
+10. **The lexicon is hand-maintained and does not converge.** 340 entries
+    derived from this project's own voice-test logs on one device with a small
+    number of speakers. Generalization to other speakers, accents and
+    microphones is unmeasured.
+
+    The deeper issue is structural rather than one of coverage. **168 of the 340
+    entries are inflectional variants of a target already present** — thirty
+    distinct keys map to `open` (*bukas, buksan, pakibuksan, pabukas, boksan,
+    i-open* …), ten to `search`, nine to `schedule`. Filipino is agglutinative
+    and the phone-command affix set is closed (`i-`, `paki-`, `mag-`, `nag-`,
+    `pag-`, `-in`, `-an`, `-um-` infix), so the language generates these forms by
+    rule while the lexicon enumerates them by hand. Each unseen affix
+    combination costs a full observe-edit-rebuild cycle, and the entry count
+    grows without approaching closure.
+
+    This isolates the actual brittleness. The pipeline contains three matching
+    stages, and the translation layer is the only one requiring exact equality:
+
+    | Stage | Matching |
+    |---|---|
+    | `TranslationLayer` | exact map lookup — **brittle** |
+    | `LevenshteinMatcher` | contains / prefix / full distance, threshold 2 |
+    | `CommandExecutor.launchApp()` | Levenshtein against installed app labels |
+
+    Observed directly: "buksan ang Facebook" transcribed as "boksan ang face
+    book" still launched the correct application. `boksan` matched the lexicon;
+    `face book` did not, passed through unnormalized, and was recovered by the
+    fuzzy matcher at stage 3.
+
+    **Future work.** Rule-based morphological normalization (affix stripping
+    with the stem confirmed against the lexicon) and guarded fuzzy lookup at
+    stage 1, applied only as a fallback after exact lookup fails. Both are
+    deterministic — identical input yields identical output, with no sampling or
+    learned weights — and therefore consistent with the study's rejection of
+    probabilistic command interpretation. A neural translation model would not
+    be, as it would reintroduce precisely the non-determinism the design argues
+    against, in addition to violating the offline constraint. Specification in
+    `DEV_GUIDE.md` §6a.
 
 ---
 

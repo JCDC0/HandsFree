@@ -138,13 +138,129 @@ Ordered. Anything below the line is post-demo.
 | 3 | Tap-by-name against real home screens | `DfsNodeLocator` | Folders and emoji labels are the weak spot |
 | 4 | Log every unmatched utterance to `CrashLog` | `OverlayService` | We currently lose the misses, and the misses are the data |
 | --- | --- | --- | --- |
-| 5 | MESSAGING execution | `CommandExecutor.execute()` | Classifies correctly, does nothing. Multi-step and stateful — **not before the demo** |
-| 6 | Tie-breaking / confidence in the matcher | `LevenshteinMatcher` | Real fix for rules 2–4 above. Frozen until after the demo |
-| 7 | Grid Overlay (manuscript calls it co-equal to DFS) | not started | Thesis scope, not demo scope |
-| 8 | Wire `AppStateMachine` for multi-turn context | `AppStateMachine.kt` | Dead code today |
+| 5 | **Morphological normalisation** (see §6a) | `TranslationLayer.kt` | Would collapse ~half the lexicon. The one structural fix, spec'd below |
+| 6 | MESSAGING execution | `CommandExecutor.execute()` | Classifies correctly, does nothing. Multi-step and stateful — **not before the demo** |
+| 7 | Tie-breaking / confidence in the matcher | `LevenshteinMatcher` | Real fix for rules 2–4 above. Frozen until after the demo |
+| 8 | Grid Overlay (manuscript calls it co-equal to DFS) | not started | Thesis scope, not demo scope |
+| 9 | Wire `AppStateMachine` for multi-turn context | `AppStateMachine.kt` | Dead code today |
 
 **Do not add a fourth feature.** Scope is APP_LAUNCH, CALL_ACCEPT, NAVIGATION
 (`CLAUDE.md` §2).
+
+---
+
+## 6a. Morphological normalisation — the post-demo structural fix
+
+**Status: specified, not built. Do not build this before Aug 14.**
+
+### The problem, with numbers
+
+Of the 340 lexicon entries, **168 are variants of a target that already
+exists**. Thirty separate keys map to `open`:
+
+```
+bukas · buksan · buksan mo · buksan mo ang · pakibuksan · pakibuksan ang
+pakibukas · pabukas · boksan · booksan · uksan · oksan · i-open · iopen …
+```
+
+Ten map to `search`, nine to `schedule`, nine to `home`, eight to `back`.
+Filipino generates these by rule — it is agglutinative, and the phone-command
+affixes are a closed set. We are hand-enumerating the output of a grammar.
+
+The lexicon therefore does not converge. Every new speaker produces affix
+combinations nobody has typed in yet, and each one costs a round trip:
+speak → read log → add entry → rebuild → reinstall.
+
+### Why this is the right diagnosis
+
+The pipeline has three matching stages. Two are already fuzzy:
+
+| Stage | Matching | Fuzzy? |
+|---|---|---|
+| `TranslationLayer` | exact map lookup on the token | **no** |
+| `LevenshteinMatcher` | contains / prefix / full, threshold 2 | yes |
+| `CommandExecutor.launchApp()` | Levenshtein vs app labels, tol `max(2, n/3)` | yes |
+
+The lexicon is the only exact-match stage in the chain, which is why everything
+appears to depend on it. Evidence: "buksan ang Facebook" transcribed as "boksan
+ang face book" still opened Facebook. `boksan` hit the lexicon, but `face book`
+did not — it passed through untouched and stage 3's fuzzy matcher recovered it.
+Stage 1 is the brittle one.
+
+### What to build
+
+**Not** an NMT or LLM translator. That breaks the offline claim if hosted and
+the determinism claim if local, adds to a 252 MB APK, and there is no parallel
+training data. `CLAUDE.md` §1 rules it out and the thesis title contains the
+word *Deterministic*.
+
+Build a **rule-based fallback chain** inside `TranslationLayer.normalize()`.
+Order matters, and exact lookup must stay first:
+
+```
+1. exact bigram lookup          (unchanged — current behaviour)
+2. exact unigram lookup         (unchanged — current behaviour)
+3. affix strip, then re-lookup  (new)
+4. fuzzy match vs lexicon keys  (new, guarded — see below)
+5. pass through unchanged       (unchanged — current behaviour)
+```
+
+**This is non-regressive by construction.** Steps 1 and 2 run first and are
+untouched, so every token that resolves correctly today resolves identically
+after the change. Only tokens that currently fall through to step 5 can behave
+differently. Say this in the commit message; it is the reason the change is
+safe to make at all.
+
+#### Step 3 — affix stripping
+
+Closed set, rules not weights, fully inspectable:
+
+| Affix | Type | Example | Stem |
+|---|---|---|---|
+| `i-`, `i` | prefix | i-open, iopen | open |
+| `paki-`, `paki` | prefix (politeness) | pakibuksan | buksan |
+| `mag-`, `mag`, `nag-`, `pag-` | prefix | magbukas, magscroll | bukas, scroll |
+| `-in`, `-an` | suffix | hanapin, sagutan | hanap, sagot |
+| `-um-` | infix after first consonant | bumalik, tumawag | balik, tawag |
+
+Strip, re-run the lookup, and **only accept the result if the stem is in the
+lexicon**. If it is not, discard the stripped form and pass the original token
+through. Never emit a stem that was not confirmed against the lexicon.
+
+#### Step 4 — fuzzy lexicon lookup
+
+Levenshtein against lexicon keys, which is the same function already in
+`LevenshteinMatcher.levenshteinDistance()`. `boksan` → `buksan` at distance 1,
+no hand-written entry needed.
+
+**Guards, all mandatory. Each one corresponds to a bug this project already
+shipped:**
+
+1. **Minimum token length 5.** Same reasoning as the four-character trigger
+   rule in §4.3: below that, distance 2 matches most of the lexicon.
+2. **Never fuzzy-match into a `""` target.** Fifty keys map to the empty
+   string. A fuzzy hit on one of those silently *deletes* a word, which is
+   unfalsifiable from the log — the token just vanishes from `Salin`.
+3. **Threshold 1, not 2.** Stage 2 already runs at 2. Two fuzzy stages at 2
+   compound into an effective 4.
+4. **Reject ties.** If two lexicon keys tie at the same distance, take neither.
+   Same hazard as §4.2 and the same reason: no deterministic tiebreak exists.
+
+### Determinism, for the panel
+
+Rule-based affix stripping and Levenshtein are **deterministic**: same input,
+same output, always. No sampling, no weights, no hallucination. Fuzzy is not the
+same as probabilistic, and the study already depends on Levenshtein for intent
+classification — this extends a mechanism the paper defends, it does not
+introduce a new class of one. An NMT model would not be defensible; this is.
+
+### Verify before shipping
+
+Replay the entire 52-phrase matrix **plus every entry in the transcript logs
+collected so far** through old and new `normalize()` and diff the output. The
+acceptance criterion is not "the new cases pass" — it is **zero changes to any
+currently-passing case**. Anything else is a regression, however good the new
+behaviour looks.
 
 ---
 
