@@ -105,11 +105,24 @@ usually a better fix than changing matcher code.** Try that first.
 
 ## 4. Working agreement
 
-### Multiple agents work this repo. Read `TASKS.md` before editing anything.
+### Multiple agents work this repo. Read `TASKS.md` before doing anything.
 
-Concurrent workers: Claude Code, Hermes/Luna, and Claude in Cowork (review and
-research). `TASKS.md` divides work by **file ownership, not by task** — two
-agents editing one file an hour apart costs more than either saves.
+It is a pipeline with review gates, not parallel workers:
+
+```
+Cowork-Claude   spec + dispatch
+      |
+GPT Luna        IMPLEMENTS — the only role that writes feature code
+      |
+Claude Code     ORCHESTRATES + CHECKS — reviews, builds, runs, gates
+      |
+Cowork-Claude   final review and finishing touches
+```
+
+**If you are Claude Code here, you are the checker, not the author.** Review
+against the per-task checklists in `TASKS.md`, build it, run it on the device,
+and pass or fail it. Fix defects you find in review — surgically, in the file
+under review. Do not rewrite a task wholesale, and do not start new features.
 
 **Frozen files. Do not modify today unless a human says otherwise:**
 `SpeechEngine.kt`, `VoskEngineAdapter.kt`, `VoskSpeechEngine.kt`,
