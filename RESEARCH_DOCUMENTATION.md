@@ -263,3 +263,28 @@ and documented as a constraint in `CLAUDE.md`.
 | `assets/intent-vocabulary.json` | ~32 | Intent trigger phrases |
 | `assets/translation-lexicon.json` | ~90 | Tagalog→English word map |
 | **Total Kotlin** | **~2,942** | |
+
+---
+
+## 8. Technical Implementation Hurdles & Refinements (For Chapter 2)
+
+During the final integration of the fine-tuned Whisper ONNX model (Karl's model) with the HandsFree application, several critical technical hurdles were encountered and resolved to achieve a functional pipeline:
+
+### 1. Audio Preprocessing Mathematics
+The `AudioPreprocessor` was initially delivering completely silent audio frames to the Whisper model, causing continuous hallucination loops (e.g., repeating the non-word `[Polong]`). This was traced to two complex mathematical bugs in the DSP pipeline:
+- **Mel Filter Bank:** The Slaney-normalized filter bank calculation incorrectly inverted its frequency subtraction `(start - frequency)`, producing negative amplitudes that were clamped to `0.0`. 
+- **FFT Phase Angle:** The Cooley-Tukey Fast Fourier Transform (FFT) recombination loop was calculating its phase angle using the wrong multiplier, effectively scrambling the complex frequencies of the input waveform before they were converted to Log-Mel spectrograms.
+
+### 2. Snappy Voice Activity Detection (VAD)
+The original implementation waited a fixed 8 seconds after the user stopped speaking before concluding the utterance. This created unacceptable latency. The trailing silence cutoff was dynamically reduced to **1.5 seconds**, vastly improving the responsiveness of the Voice-to-Intent pipeline.
+
+### 3. Substring Intent Matching
+The `LevenshteinMatcher` was originally failing to classify intents for long, conversational transcriptions (e.g., "open facebook") because the edit-distance between the long phrase and the short intent trigger word (e.g., "open") exceeded the threshold of 2. The matcher was re-engineered to perform **substring and prefix matching**, successfully extracting intent commands from continuous conversational strings.
+
+### 4. Continuous System State Auditing
+To support robust field testing, a **Transcript History Log** was built directly into the `OverlayService`. This background service captures up to 50 sequential utterances, logging the exact chronological flow of:
+1. The phonetic audio model output (Narinig).
+2. The normalized translation (Salin).
+3. The matched finite-state intent.
+4. The execution result of the accessibility service.
+This real-time debugging mechanism was critical for rapidly identifying and mapping Tagalog/English phonetic hallucinations into the `translation-lexicon.json`.
