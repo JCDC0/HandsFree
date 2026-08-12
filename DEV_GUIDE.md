@@ -60,6 +60,43 @@ What that buys and what it costs:
 | ⚠️ | **The microphone cycles continuously while it is on.** That is why it defaults to off and why the toggle says so |
 | ⚠️ | Latency: VAD waits ~1.5 s of silence, then inference runs. Expect a few seconds before anything happens |
 
+### Why "Hey Google" is cheap and ours is not
+
+Worth knowing before anyone reports our battery cost as a bug, and worth a
+paragraph in the manuscript's future work.
+
+"Hey Google" does **not** run with the microphone off — the mic is on. What
+differs is what is listening and where:
+
+| | "Hey Google" | HandsFree today |
+|---|---|---|
+| Model | purpose-built keyword spotter, well under a million parameters | whisper-tiny, 37.8M parameters |
+| Runs on | the phone's always-on low-power audio DSP (sensor hub), main CPU asleep | the application CPU |
+| Wakes the CPU | only after the keyword fires | every utterance-shaped sound |
+| Audio handling | rolling buffer inside the DSP, discarded unless the keyword hits | full 30 s window decoded |
+
+Android exposes that path as the **SoundTrigger HAL**, reached through
+`AlwaysOnHotwordDetector`. Two things put it out of reach for us:
+
+1. It is only callable by the app holding the **assistant role**
+   (a `VoiceInteractionService` the user has selected as their digital
+   assistant).
+2. The DSP can only listen for keyphrases **enrolled in the device firmware**.
+   Those are shipped by Google and the OEM. There is no API for a third-party
+   app to enrol "Hey HandsFree" into the DSP, so even with the assistant role
+   the detector reports the keyphrase unenrolled.
+
+Android 12 added `HotwordDetectionService`, which lets an assistant-role app run
+its **own** detector in an isolated process — software, not DSP. That is a real
+path for a third-party app, and it is the one worth investigating post-demo.
+
+**The cheap win, though, is not an Android API — it is model size.** Production
+pipelines cascade: a tiny always-on keyword spotter gates a full recogniser.
+We currently have the second stage doing the first stage's job. Putting any
+small keyword-spotting model in front of Whisper would cut the idle cost by
+orders of magnitude while leaving the architecture, the offline claim and the
+determinism claim exactly as they are. See §6 task 4c.
+
 **If the call sign is not waking the app, add the mishearing to
 `WakeWordDetector.DEFAULT_VARIANTS`** — same maintenance loop as the lexicon.
 Read `Narinig` in the Transcript History to see what Whisper actually heard.
@@ -176,6 +213,7 @@ Ordered. Anything below the line is post-demo.
 | 3 | Tap-by-name against real home screens | `DfsNodeLocator` | Folders and emoji labels are the weak spot |
 | 4 | Log every unmatched utterance to `CrashLog` | `OverlayService` | We currently lose the misses, and the misses are the data |
 | 4b | **Auto-listen when a call rings** (not built — see below) | `OverlayService` | JC asked for it; deliberately deferred until answering is proven to work |
+| 4c | **Cascade a small keyword spotter in front of Whisper** | `OverlayService`, new detector | The fix for always-on battery cost. Delegated to Antigravity — see §1a and the brief below |
 | --- | --- | --- | --- |
 | 5 | **Morphological normalisation** (see §6a) | `TranslationLayer.kt` | Would collapse ~half the lexicon. The one structural fix, spec'd below |
 | 6 | MESSAGING execution | `CommandExecutor.execute()` | Classifies correctly, does nothing. Multi-step and stateful — **not before the demo** |
