@@ -30,6 +30,13 @@ have been conflated repeatedly in this project and it has cost real time.
 | CALL_ACCEPT / DECLINE | ✅ repaired | ❌ **tested 21:13, failed. Repair not yet installed — see below** |
 | SCHEDULING (alarm + timer) | ✅ repaired twice | ❌ **never once opened the Clock** — the permission was misnamed until the night build |
 | MESSAGING | ⛔ classifies only | n/a — out of scope by design |
+| "Hey HandsFree" call sign (opt-in) | ✅ new | ❌ **never spoken on the device** |
+
+The current build **is** installed on 144512558D105352. Open the app once: it
+will now ask for a **Phone** permission that did not exist before, and nothing
+about calls works until that is granted (`dumpsys` currently reports
+`ANSWER_PHONE_CALLS: granted=false`, which is normal for a runtime permission
+nobody has accepted yet).
 
 **The three things that matter before the demo, in order:**
 

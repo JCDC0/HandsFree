@@ -194,6 +194,16 @@
             android:layout_marginBottom="10dp" />
 
         <Button
+            android:id="@+id/wake_word_button"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="👂 Call sign: OFF"
+            android:textSize="14sp"
+            android:backgroundTint="#EEEEEE"
+            android:textColor="#333333"
+            android:layout_marginBottom="10dp" />
+
+        <Button
             android:id="@+id/perm_button"
             android:layout_width="match_parent"
             android:layout_height="52dp"

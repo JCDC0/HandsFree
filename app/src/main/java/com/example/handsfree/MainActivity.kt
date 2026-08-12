@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -46,8 +47,16 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var startButton: Button
     private lateinit var permButton: Button
     private lateinit var showLogButton: Button
+    private lateinit var wakeWordButton: Button
 
     private lateinit var showHistoryButton: Button
+
+    /**
+     * Always-on call-sign listening. Persisted so a tester's choice survives a
+     * restart, and **off by default** — it keeps the microphone cycling, which
+     * is a battery and privacy cost nobody should pay without asking for it.
+     */
+    private var wakeWordOn = false
 
     /**
      * Previous handler captured so we can delegate after logging our own crash
@@ -149,6 +158,48 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         }
     }
 
+    /**
+     * Flip always-on call-sign listening.
+     *
+     * The service is the owner of the flag; this only persists the choice and
+     * tells the service. Turning it on when the pipeline is stopped starts it,
+     * since a call sign nobody is listening for is just a button that does
+     * nothing.
+     */
+    private fun toggleWakeWord() {
+        wakeWordOn = !wakeWordOn
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(PREF_WAKE_WORD, wakeWordOn).apply()
+        updateWakeWordButton()
+
+        if (wakeWordOn && !pipelineActive) {
+            if (hasRecordAudioPermission()) startOverlayService() else {
+                requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                return
+            }
+        }
+        startService(
+            Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_SET_WAKE_WORD
+                putExtra(OverlayService.EXTRA_ENABLED, wakeWordOn)
+            }
+        )
+        if (wakeWordOn) {
+            Toast.makeText(
+                this,
+                "Say \"Hey HandsFree\" then your command. The mic stays on.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun updateWakeWordButton() {
+        wakeWordButton.text = if (wakeWordOn) "👂 Call sign: ON" else "👂 Call sign: OFF"
+        wakeWordButton.backgroundTintList = ColorStateList.valueOf(
+            if (wakeWordOn) 0xFFC8E6C9.toInt() else 0xFFEEEEEE.toInt()
+        )
+    }
+
     private fun hasAnswerCallPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) ==
             PackageManager.PERMISSION_GRANTED
@@ -167,6 +218,11 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         permButton = findViewById(R.id.perm_button)
         showLogButton = findViewById(R.id.show_log_button)
         showHistoryButton = findViewById(R.id.show_history_button)
+        wakeWordButton = findViewById(R.id.wake_word_button)
+
+        wakeWordOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_WAKE_WORD, false)
+        updateWakeWordButton()
+        wakeWordButton.setOnClickListener { toggleWakeWord() }
 
         // Load LevenshteinMatcher for intent display in the debug UI
         levenshteinMatcher = runCatching {
@@ -503,5 +559,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             }
             .setNegativeButton("Cancel") { _, _ -> isSettingUp = false }
             .show()
+    }
+
+    private companion object {
+        const val PREFS = "handsfree_prefs"
+        const val PREF_WAKE_WORD = "wake_word_enabled"
     }
 }

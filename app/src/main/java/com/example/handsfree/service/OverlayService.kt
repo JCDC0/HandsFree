@@ -25,6 +25,7 @@ import com.example.handsfree.pipeline.CommandExecutor
 import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.pipeline.SpeechEngine
 import com.example.handsfree.pipeline.TranslationLayer
+import com.example.handsfree.pipeline.WakeWordDetector
 import com.example.handsfree.pipeline.WhisperOnnxEngine
 import com.example.handsfree.util.CrashLog
 import kotlinx.coroutines.CoroutineScope
@@ -63,6 +64,21 @@ class OverlayService : Service() {
     @Volatile private var pipelineRunning = false
     @Volatile private var listening = false
     @Volatile private var startWhenReady = false
+
+    /** Always-on call-sign mode. Off unless the user turns it on. */
+    @Volatile private var wakeWordEnabled = false
+
+    /** Set when the bubble or accessibility button woke us — no call sign needed. */
+    @Volatile private var explicitActivation = false
+
+    /** Call sign heard alone: take the next utterance as the command. */
+    @Volatile private var awaitingCommand = false
+
+    private val wakeWordDetector = WakeWordDetector()
+
+    private val rearmRunnable = Runnable {
+        if (wakeWordEnabled && !listening) startListening()
+    }
 
     private var windowManager: WindowManager? = null
     private var bubbleView: View? = null
@@ -178,13 +194,78 @@ class OverlayService : Service() {
 
     /** Whisper emits one result after the listening window, not per audio chunk. */
     private fun flushWhisperUtterance() {
-        val whisper = speechEngine as? WhisperOnnxEngine ?: return
+        val whisper = speechEngine as? WhisperOnnxEngine ?: run { scheduleRearm(); return }
         scope.launch {
             val raw = whisper.onUtteranceComplete()
-            if (!raw.isNullOrBlank()) {
-                mainHandler.post { handleUtterance(raw) }
+            mainHandler.post {
+                // Re-arming has to wait for inference to finish. Starting a new
+                // capture while the previous transcript is still being decoded
+                // would feed audio into the engine mid-inference.
+                if (!raw.isNullOrBlank()) handleUtterance(raw) else scheduleRearm()
             }
         }
+    }
+
+    // ---- always-on call sign ----
+
+    /**
+     * Queue the next listening cycle in always-on mode.
+     *
+     * Only ever called once the previous utterance is fully handled, so at most
+     * one capture exists at a time.
+     */
+    private fun scheduleRearm() {
+        if (!wakeWordEnabled) return
+        mainHandler.removeCallbacks(rearmRunnable)
+        mainHandler.postDelayed(rearmRunnable, REARM_DELAY_MS)
+    }
+
+    private fun setWakeWordEnabled(enabled: Boolean) {
+        if (wakeWordEnabled == enabled) return
+        wakeWordEnabled = enabled
+        Log.i(TAG, "call-sign mode ${if (enabled) "on" else "off"}")
+        mainHandler.removeCallbacks(rearmRunnable)
+        awaitingCommand = false
+        if (enabled) {
+            if (!listening) startListening()
+        } else if (listening && !explicitActivation) {
+            stopListening("call-sign mode off")
+        }
+    }
+
+    /**
+     * Gate an utterance heard in always-on mode.
+     *
+     * @return the text to run as a command, or null when this utterance was not
+     *         addressed to HandsFree and should be discarded silently.
+     */
+    private fun applyWakeGate(raw: String): String? {
+        if (!wakeWordEnabled || explicitActivation || awaitingCommand) {
+            awaitingCommand = false
+            return raw
+        }
+
+        val hit = wakeWordDetector.detect(raw)
+        if (hit == null) {
+            // Not addressed to us. Deliberately not written to the transcript
+            // history — in always-on mode that would fill with room noise and
+            // bury the entries testers actually need to read.
+            Log.d(TAG, "no call sign in \"$raw\" — ignoring")
+            scheduleRearm()
+            return null
+        }
+
+        if (hit.command.isBlank()) {
+            // Call sign alone. Listen once more, without requiring it again.
+            Log.i(TAG, "call sign \"${hit.matched}\" — awaiting command")
+            awaitingCommand = true
+            emitStatus(STATUS_LISTENING)
+            scheduleRearm()
+            return null
+        }
+
+        Log.i(TAG, "call sign \"${hit.matched}\" + command \"${hit.command}\"")
+        return hit.command
     }
 
     private fun startPipeline() {
@@ -218,6 +299,10 @@ class OverlayService : Service() {
             listening = false
             pipelineRunning = false
             startWhenReady = false
+            // Do not re-arm after a backend failure. A mic or model fault that
+            // repeats would otherwise loop on the microphone indefinitely.
+            mainHandler.removeCallbacks(rearmRunnable)
+            awaitingCommand = false
             mainHandler.removeCallbacks(sleepRunnable)
             runCatching { audioPreprocessor.stopCapture() }
             updateBubble("🎤", 0xFF1E88E5.toInt())
@@ -228,8 +313,11 @@ class OverlayService : Service() {
 
     /** Full path from transcript to executed command. */
     private fun handleUtterance(raw: String) {
-        val normalized = runCatching { translationLayer.normalize(raw) }
-            .getOrElse { raw }.ifBlank { raw }
+        val spoken = applyWakeGate(raw) ?: return
+        explicitActivation = false
+
+        val normalized = runCatching { translationLayer.normalize(spoken) }
+            .getOrElse { spoken }.ifBlank { spoken }
         emitResult(raw, normalized)
 
         val match = matcher?.classify(normalized)
@@ -244,6 +332,7 @@ class OverlayService : Service() {
             
             emitCommand("—", false, resultMsg)
             stopListening("no match")
+            scheduleRearm()
             return
         }
 
@@ -260,6 +349,7 @@ class OverlayService : Service() {
 
         emitCommand(category, result.success, result.message)
         stopListening("command handled")
+        scheduleRearm()
     }
 
     // ---- floating bubble ----
@@ -427,12 +517,24 @@ class OverlayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
-            ACTION_ACTIVATE -> if (listening) stopListening("toggle") else startListening()
-            ACTION_START -> startListening()
+            ACTION_ACTIVATE -> if (listening) {
+                stopListening("toggle")
+            } else {
+                explicitActivation = true
+                startListening()
+            }
+            ACTION_START -> {
+                explicitActivation = true
+                startListening()
+            }
             ACTION_STOP_PIPELINE -> {
                 startWhenReady = false
+                wakeWordEnabled = false
+                mainHandler.removeCallbacks(rearmRunnable)
                 stopListening("explicit stop")
             }
+            ACTION_SET_WAKE_WORD ->
+                setWakeWordEnabled(intent.getBooleanExtra(EXTRA_ENABLED, false))
         }
         return START_STICKY
     }
@@ -441,6 +543,8 @@ class OverlayService : Service() {
         Log.i(TAG, "onDestroy")
         listening = false
         pipelineRunning = false
+        wakeWordEnabled = false
+        mainHandler.removeCallbacks(rearmRunnable)
         mainHandler.removeCallbacks(sleepRunnable)
         hideBubble()
         runCatching { audioPreprocessor.release() }
@@ -498,10 +602,21 @@ class OverlayService : Service() {
         /** How long the mic stays open after activation. */
         private const val LISTEN_WINDOW_MS = 8000L
 
+        /**
+         * Pause between an utterance being handled and the next capture in
+         * always-on mode. Long enough for `AudioRecord` to be released and
+         * re-acquired; short enough that a command spoken straight after the
+         * call sign is not clipped.
+         */
+        private const val REARM_DELAY_MS = 600L
+
         const val ACTION_START = "com.example.handsfree.START"
         const val ACTION_STOP_PIPELINE = "com.example.handsfree.STOP_PIPELINE"
         /** Wake or sleep the listener. Sent by the bubble and the volume-key activator. */
         const val ACTION_ACTIVATE = "com.example.handsfree.ACTIVATE"
+        /** Turn always-on call-sign listening on or off. Carries [EXTRA_ENABLED]. */
+        const val ACTION_SET_WAKE_WORD = "com.example.handsfree.SET_WAKE_WORD"
+        const val EXTRA_ENABLED = "enabled"
 
         const val STATUS_PREPARING = "PREPARING"
         const val STATUS_IDLE = "IDLE"

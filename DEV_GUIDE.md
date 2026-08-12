@@ -31,9 +31,47 @@ work live just because it appears here.
 Particles are ignored, so `po`, `mo`, `nga`, `naman`, `lang`, `paki-`, `pwede
 mo bang` are all safe to say naturally.
 
+**Call sign (optional, off by default).** Tap **👂 Call sign: OFF** in the debug
+UI to turn it on, then say **"Hey HandsFree"** followed by any command above —
+either in one breath ("Hey HandsFree, buksan mo ang YouTube") or on its own,
+which arms the next utterance as the command. See §1a before switching it on.
+
 **Demo sequence (rehearse this, do not improvise):** open the app → hold the
 activator → "buksan mo ang YouTube" → "bumalik" → incoming call → "sagutin".
 Do not demo Messaging. Scheduling works but is not part of the script.
+
+---
+
+## 1a. The call sign — how it works and what it costs
+
+**There is no hotword engine.** Adding one (Porcupine, openWakeWord) would mean
+a new dependency and, in Porcupine's case, a licence key — `CLAUDE.md` §1 and
+§10 both push back on that. So always-on mode just runs the ordinary
+listen → transcribe cycle in a loop and **discards every utterance that does not
+open with the call sign**. `WakeWordDetector` decides; `OverlayService` re-arms.
+
+What that buys and what it costs:
+
+| | |
+|---|---|
+| ✅ | No new dependency, no licence, still fully offline and deterministic |
+| ✅ | Reuses the whole existing pipeline — the call sign is matched by the same Levenshtein function as everything else |
+| ⚠️ | **Whisper runs on every utterance-shaped sound in the room.** Battery and heat scale with how much talking happens nearby |
+| ⚠️ | **The microphone cycles continuously while it is on.** That is why it defaults to off and why the toggle says so |
+| ⚠️ | Latency: VAD waits ~1.5 s of silence, then inference runs. Expect a few seconds before anything happens |
+
+**If the call sign is not waking the app, add the mishearing to
+`WakeWordDetector.DEFAULT_VARIANTS`** — same maintenance loop as the lexicon.
+Read `Narinig` in the Transcript History to see what Whisper actually heard.
+Keep every variant five characters or longer and distinctive; a variant close to
+an ordinary word will wake the app mid-conversation.
+
+Utterances with no call sign are **not** written to the Transcript History. In
+always-on mode that would fill with room noise and bury the entries testers need.
+They are logged to logcat (`OverlayService`) at debug level.
+
+The bubble and the accessibility button still work exactly as before, and a
+command spoken through them never needs the call sign.
 
 ---
 

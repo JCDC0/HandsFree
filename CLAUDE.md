@@ -395,6 +395,30 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-08-12 (night, 4) — "Hey HandsFree" call sign
+Always-on activation, **off by default**, toggled from the debug UI.
+- No hotword engine and no new dependency. `OverlayService` loops the ordinary
+  listen → transcribe cycle and discards every utterance that does not open with
+  the call sign. `WakeWordDetector` (new, pure logic, no Android imports) makes
+  that decision using the existing `levenshteinDistance`, so the feature stays
+  deterministic and offline — §1 holds.
+- Matching joins up to three consecutive tokens and compares without spaces,
+  because Whisper's spacing is unreliable: "hands free", "handsfree" and
+  "hey hands free" all reduce to the same string. Known mishearings live in
+  `DEFAULT_VARIANTS`, maintained exactly like the lexicon.
+- Two shapes both work: "Hey HandsFree, buksan mo ang YouTube" in one breath, or
+  "Hey HandsFree" alone, which arms the next utterance as the command.
+- Re-arming happens **only after inference completes**. Starting a capture while
+  the previous transcript is still decoding would feed audio into
+  `WhisperOnnxEngine` mid-inference.
+- No re-arm after a backend error — a repeating mic or model fault would
+  otherwise loop on the microphone indefinitely.
+- Verified offline against 9 garble variants (all wake) and 15 ordinary Tagalog
+  and English utterances (none wake) before building.
+- **Costs, stated plainly:** the mic cycles continuously and Whisper runs on
+  every utterance-shaped sound in the room. Battery and heat scale with ambient
+  speech. This is why it is opt-in and why the demo build should leave it off.
+
 ### 2026-08-12 (night, 3) — SMART_SEARCH executes the search
 - `ACTION_WEB_SEARCH` only *prefills* the query on most handlers: the browser
   opened with the words sitting in the search box waiting for a keypress, which
