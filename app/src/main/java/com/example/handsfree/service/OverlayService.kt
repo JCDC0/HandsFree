@@ -233,21 +233,29 @@ class OverlayService : Service() {
         emitResult(raw, normalized)
 
         val match = matcher?.classify(normalized)
-        val intentStr = if (match != null) "${match.first} (${match.second})" else "No match"
         
-        val logEntry = "Narinig: $raw\nSalin: $normalized\nIntent: $intentStr"
-        transcriptHistory.add(0, logEntry)
-        if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
-
         if (match == null) {
-            emitCommand("—", false, "No matching command")
+            val intentStr = "No match"
+            val resultMsg = "No matching command"
+            val logEntry = "Narinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: FAILED - $resultMsg"
+            transcriptHistory.add(0, logEntry)
+            if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
+            
+            emitCommand("—", false, resultMsg)
             stopListening("no match")
             return
         }
 
         val (category, phrase) = match
+        val intentStr = "$category ($phrase)"
+        
         val result = runCatching { commandExecutor.execute(category, normalized, phrase) }
             .getOrElse { CommandExecutor.Result(false, it.message ?: "Execution failed") }
+
+        val statusStr = if (result.success) "SUCCESS" else "FAILED"
+        val logEntry = "Narinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: $statusStr - ${result.message}"
+        transcriptHistory.add(0, logEntry)
+        if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
 
         emitCommand(category, result.success, result.message)
         stopListening("command handled")
