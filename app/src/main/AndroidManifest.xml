@@ -17,6 +17,12 @@
          SET_ALARM" does not exist, so declaring it granted nothing and the
          SecurityException survived into the 20:44 test round. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- TelecomManager.acceptRingingCall()/endCall() are no-ops or throw
+         without this. It is a *runtime* permission: declaring it is not
+         enough, MainActivity must request it and the user must grant it.
+         CALL_ACCEPT had never once executed before this was added. -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <application
         android:allowBackup="true"

@@ -1,11 +1,14 @@
 package com.example.handsfree.pipeline
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Rect
 import android.provider.AlarmClock
 import android.telecom.TelecomManager
 import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
 import com.example.handsfree.service.HandsFreeAccessibilityService
 
 /**
@@ -41,7 +44,10 @@ class CommandExecutor(
         Log.i(TAG, "execute($intentCategory) utterance=\"$utterance\"")
 
         val a11y = HandsFreeAccessibilityService.instance
-        if (a11y == null && intentCategory != "APP_LAUNCH" && intentCategory != "SCHEDULING") {
+        // CALL_ACCEPT is exempt: with ANSWER_PHONE_CALLS granted, TelecomManager
+        // answers without the accessibility service being involved at all. The
+        // service is only needed for the node-click fallback.
+        if (a11y == null && intentCategory !in NO_A11Y_REQUIRED) {
             return Result(false, "Accessibility Service is off — enable HandsFree in Settings")
         }
 
@@ -147,35 +153,99 @@ class CommandExecutor(
      */
     private fun handleCall(utterance: String): Result {
         val declining = DECLINE_WORDS.any { utterance.contains(it, ignoreCase = true) }
+        val verb = if (declining) "declined" else "answered"
 
+        // Only trust Telecom if the permission is actually held. Without
+        // ANSWER_PHONE_CALLS these calls do not throw on every OEM — some
+        // silently do nothing, and the old code returned "Call answered" while
+        // the phone kept ringing. A false success is worse than a failure: it
+        // stops us falling back, and it lies in the transcript log.
         val telecom = context.getSystemService(TelecomManager::class.java)
-        if (telecom != null) {
+        if (telecom != null && hasAnswerCallPermission()) {
             try {
-                @Suppress("MissingPermission")
-                if (declining) {
-                    telecom.endCall()
-                    return Result(true, "Call declined")
-                } else {
-                    telecom.acceptRingingCall()
-                    return Result(true, "Call answered")
-                }
+                if (declining) telecom.endCall() else telecom.acceptRingingCall()
+                return Result(true, "Call $verb")
             } catch (se: SecurityException) {
-                Log.w(TAG, "Telecom denied, falling back to node tap", se)
+                Log.w(TAG, "Telecom denied despite permission, falling back", se)
             } catch (t: Throwable) {
-                Log.w(TAG, "Telecom failed, falling back to node tap", t)
+                Log.w(TAG, "Telecom failed, falling back to node click", t)
             }
+        } else if (telecom != null) {
+            Log.w(TAG, "ANSWER_PHONE_CALLS not granted — using the node tree instead")
         }
 
-        val a11y = HandsFreeAccessibilityService.instance
-            ?: return Result(false, "Accessibility Service is off")
+        val a11y = HandsFreeAccessibilityService.instance ?: return Result(
+            false,
+            "Grant Phone permission in the app, or turn on the Accessibility Service"
+        )
         val labels = if (declining) DECLINE_LABELS else ANSWER_LABELS
-        labels.forEach { label ->
-            nodeLocator.findNode(a11y.getActiveRoot(), label)?.let { bounds ->
-                a11y.tapRect(bounds)
-                return Result(true, if (declining) "Call declined" else "Call answered")
+        return if (clickCallControl(a11y, labels)) {
+            Result(true, "Call $verb")
+        } else {
+            Result(false, "No incoming call control found")
+        }
+    }
+
+    private fun hasAnswerCallPermission(): Boolean =
+        context.checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Find and click an answer/decline control in **any** visible window.
+     *
+     * Two reasons this does not go through [DfsNodeLocator.findNode]:
+     *
+     * 1. A ringing call is usually a heads-up notification, which lives in its
+     *    own window. `rootInActiveWindow` returns whatever the user was looking
+     *    at — often our own overlay — so searching only the active window found
+     *    nothing while the call banner was plainly on screen.
+     * 2. `ACTION_CLICK` on the node beats tapping its centre coordinate. Call
+     *    banners are frequently laid out so the centre of the matched node is
+     *    not a touch target.
+     *
+     * Falls back to a coordinate tap when the click action is refused.
+     */
+    private fun clickCallControl(
+        a11y: HandsFreeAccessibilityService,
+        labels: List<String>
+    ): Boolean {
+        a11y.getAllRoots().forEach { root ->
+            labels.forEach { label ->
+                val hit = findLabelled(root, label, 0)
+                if (hit != null) {
+                    val target = nodeLocator.clickableAncestor(hit) ?: hit
+                    Log.i(TAG, "call control matched \"$label\"")
+                    if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                    val bounds = Rect().also { target.getBoundsInScreen(it) }
+                    if (bounds.width() > 0 && bounds.height() > 0) {
+                        a11y.tapRect(bounds)
+                        return true
+                    }
+                }
             }
         }
-        return Result(false, "No incoming call control found")
+        return false
+    }
+
+    /** First visible node whose text, description or id contains [label]. */
+    private fun findLabelled(
+        node: AccessibilityNodeInfo?,
+        label: String,
+        depth: Int
+    ): AccessibilityNodeInfo? {
+        if (node == null || depth > MAX_TREE_DEPTH) return null
+        if (node.isVisibleToUser) {
+            val haystack = listOfNotNull(
+                node.text?.toString(),
+                node.contentDescription?.toString(),
+                node.viewIdResourceName?.substringAfterLast('/')
+            ).joinToString(" ").lowercase()
+            if (haystack.contains(label.lowercase())) return node
+        }
+        for (i in 0 until node.childCount) {
+            findLabelled(node.getChild(i), label, depth + 1)?.let { return it }
+        }
+        return null
     }
 
     // ---- NAVIGATION ----
@@ -385,6 +455,12 @@ class CommandExecutor(
          * tested before "press" or the argument keeps a leading "on".
          */
         private val TAP_VERBS = listOf("press on", "tap on", "press", "click", "select")
+
+        /** Guard against pathological trees, matching `DfsNodeLocator`. */
+        private const val MAX_TREE_DEPTH = 60
+
+        /** Intents that can still do something useful with the service off. */
+        private val NO_A11Y_REQUIRED = setOf("APP_LAUNCH", "SCHEDULING", "CALL_ACCEPT")
 
         private val DECLINE_WORDS = listOf("decline", "reject", "tanggihan", "ayaw")
         private val ANSWER_LABELS = listOf("answer", "accept", "sagutin", "pick up")

@@ -195,6 +195,29 @@ class HandsFreeAccessibilityService : AccessibilityService() {
 
     fun getActiveRoot(): AccessibilityNodeInfo? = rootInActiveWindow
 
+    /**
+     * Roots of every window this service can see, active window first.
+     *
+     * An incoming call is normally a heads-up notification living in its own
+     * window, so [rootInActiveWindow] returns whatever the user was looking at
+     * — frequently our own overlay — and the call banner is invisible to a
+     * search that only looks there. `flagRetrieveInteractiveWindows` in
+     * `accessibility_service_config.xml` is what makes `windows` non-empty.
+     *
+     * Additive on purpose: [getActiveRoot] is unchanged, so every existing
+     * caller behaves exactly as before.
+     */
+    fun getAllRoots(): List<AccessibilityNodeInfo> {
+        val roots = mutableListOf<AccessibilityNodeInfo>()
+        rootInActiveWindow?.let { roots.add(it) }
+        runCatching {
+            windows.forEach { window ->
+                window.root?.let { if (it != rootInActiveWindow) roots.add(it) }
+            }
+        }.onFailure { Log.w(TAG, "window enumeration failed", it) }
+        return roots
+    }
+
     // --- Gesture dispatch ---
 
     /** Single-finger tap at absolute screen coordinates. */

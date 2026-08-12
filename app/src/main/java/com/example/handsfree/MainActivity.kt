@@ -113,11 +113,45 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private val requestAudioPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
+                requestCallPermission()
                 startOverlayService()
             } else {
                 Toast.makeText(this, "RECORD_AUDIO permission required", Toast.LENGTH_LONG).show()
             }
         }
+
+    /**
+     * ANSWER_PHONE_CALLS is a runtime permission. Without it
+     * [android.telecom.TelecomManager.acceptRingingCall] does nothing and
+     * reports nothing — the app claimed "Call answered" while the phone kept
+     * ringing. Asked for separately so a refusal costs only CALL_ACCEPT and
+     * still leaves the rest of the app usable.
+     */
+    private val requestCallPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            if (result[Manifest.permission.ANSWER_PHONE_CALLS] != true) {
+                Toast.makeText(
+                    this,
+                    "Without Phone permission, \"sagutin\" cannot answer calls",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+    private fun requestCallPermission() {
+        if (!hasAnswerCallPermission()) {
+            requestCallPermissions.launch(
+                arrayOf(
+                    Manifest.permission.ANSWER_PHONE_CALLS,
+                    Manifest.permission.READ_PHONE_STATE
+                )
+            )
+        }
+    }
+
+    private fun hasAnswerCallPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) ==
+            PackageManager.PERMISSION_GRANTED
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -298,6 +332,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         if (!hasRecordAudioPermission()) add("RECORD_AUDIO")
         if (!Settings.canDrawOverlays(this@MainActivity)) add("OVERLAY")
         if (!isAccessibilityServiceEnabled()) add("ACCESSIBILITY")
+        if (!hasAnswerCallPermission()) add("PHONE")
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
@@ -443,6 +478,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         if ("RECORD_AUDIO" in missing) {
             message.append("• Record Audio (needed to hear your commands)\n")
         }
+        if ("PHONE" in missing) {
+            message.append("• Phone (needed to answer or reject calls by voice)\n")
+        }
 
         AlertDialog.Builder(this)
             .setTitle("Setup Required")
@@ -460,6 +498,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     "RECORD_AUDIO" in missing -> {
                         requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
                     }
+                    "PHONE" in missing -> requestCallPermission()
                 }
             }
             .setNegativeButton("Cancel") { _, _ -> isSettingUp = false }

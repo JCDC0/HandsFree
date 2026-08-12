@@ -137,6 +137,7 @@ Ordered. Anything below the line is post-demo.
 | 2 | Confirm the activator on each tester's phone | `HandsFreeAccessibilityService` | Accessibility button works; volume-key hold is OEM-dependent |
 | 3 | Tap-by-name against real home screens | `DfsNodeLocator` | Folders and emoji labels are the weak spot |
 | 4 | Log every unmatched utterance to `CrashLog` | `OverlayService` | We currently lose the misses, and the misses are the data |
+| 4b | **Auto-listen when a call rings** (not built — see below) | `OverlayService` | JC asked for it; deliberately deferred until answering is proven to work |
 | --- | --- | --- | --- |
 | 5 | **Morphological normalisation** (see §6a) | `TranslationLayer.kt` | Would collapse ~half the lexicon. The one structural fix, spec'd below |
 | 6 | MESSAGING execution | `CommandExecutor.execute()` | Classifies correctly, does nothing. Multi-step and stateful — **not before the demo** |
@@ -146,6 +147,31 @@ Ordered. Anything below the line is post-demo.
 
 **Do not add a fourth feature.** Scope is APP_LAUNCH, CALL_ACCEPT, NAVIGATION
 (`CLAUDE.md` §2).
+
+### 4b. Auto-listen on an incoming call — specified, not built
+
+**Why it is wanted:** answering "hands-free" today still means pressing the
+accessibility button, which is touching the phone. An adviser will notice.
+
+**Why it is not built yet:** it would sit on top of a path that has never once
+worked. Until a real call is answered by voice on this device, auto-starting the
+listener only changes *when* a broken thing runs. Build it the moment CALL_ACCEPT
+is confirmed working, not before.
+
+**It is not restriction-breaking.** `READ_PHONE_STATE` is already declared, and
+`OverlayService` is already a started foreground service with
+`foregroundServiceType="microphone"`, so beginning a listen cycle from a callback
+does not hit the Android 12+ background-start restriction. Roughly:
+
+1. Register a `TelephonyCallback.CallStateListener` (API 31+) in
+   `OverlayService.onCreate`, or a `PhoneStateListener` below that.
+2. On `CALL_STATE_RINGING`, call the same entry point the accessibility button
+   uses (`ACTION_ACTIVATE`).
+3. On `CALL_STATE_OFFHOOK` or `IDLE`, stop listening — **mandatory**. Holding the
+   mic open into a live call is both useless and a privacy problem.
+4. Unregister in `onDestroy`.
+
+Keep it behind a flag so it can be switched off in the demo build if it misfires.
 
 ---
 

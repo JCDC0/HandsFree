@@ -27,15 +27,21 @@ have been conflated repeatedly in this project and it has cost real time.
 | NAVIGATION — scroll up/down | ✅ | ✅ |
 | NAVIGATION — tap-by-name ("pindutin ang kalendar") | ✅ | ✅ tapped Calendar on the home screen |
 | SMART_SEARCH — "hanapin ang sapatos" | ✅ | ✅ |
-| CALL_ACCEPT / DECLINE | ✅ | ❌ **never run — needs a second phone** |
+| CALL_ACCEPT / DECLINE | ✅ repaired | ❌ **tested 21:13, failed. Repair not yet installed — see below** |
 | SCHEDULING (alarm + timer) | ✅ repaired twice | ❌ **never once opened the Clock** — the permission was misnamed until the night build |
 | MESSAGING | ⛔ classifies only | n/a — out of scope by design |
 
 **The three things that matter before the demo, in order:**
 
-1. **Place a real call to the device and say "sagutin".** CALL_ACCEPT is one of
-   the three demo features and has never executed once. If it fails, you need to
-   know tonight, not in front of the adviser.
+1. **Install the current build, grant the new Phone permission, and call the
+   device again.** CALL_ACCEPT was tested for real at 21:13 and failed — it
+   depended on `ANSWER_PHONE_CALLS`, which the app had never declared or
+   requested. That is fixed in code but **the fixed build has never been
+   installed**: the phone was disconnected when it was built. Until someone
+   plugs in, runs `./gradlew installDebug`, accepts the Phone permission prompt
+   and hears "sagutin" answer a real call, one third of the demo is unproven.
+   The transcript log will also lie less now — the old code reported "Call
+   answered" whether or not anything happened.
 2. **Retest "pindutin ang Games"** on the actual home screen. The fix was
    verified in an offline simulation, not aloud.
 3. **Run the demo sequence end to end, three times, without changing anything

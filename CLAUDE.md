@@ -245,8 +245,16 @@ the demo. Remove it after Aug 14, not before.
   tapping or the tap lands on a `TextView` inside the button, not the button.
 - **Fuzzy-match app names.** At 63% WER exact matching fails constantly.
 - **`TelecomManager.acceptRingingCall()` needs `ANSWER_PHONE_CALLS`**, a runtime
-  permission. `CommandExecutor` already falls back to tapping the answer button
-  via the node tree. Keep that fallback.
+  permission — declare it *and* request it. It returns `void`, and on some OEMs
+  it silently does nothing rather than throwing when the permission is missing,
+  so never report success from the fact that it did not throw. Check the
+  permission first. The node-click fallback exists for when it is refused; keep
+  it.
+- **A ringing call is a heads-up notification in its own window.**
+  `rootInActiveWindow` does not contain it — it returns whatever the user was
+  looking at, often our own overlay. Use `getAllRoots()` for anything that
+  might not be in the focused window, and prefer `ACTION_CLICK` on the node
+  over tapping its centre; call banners often are not touchable at the centre.
 
 ---
 
@@ -349,8 +357,12 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
   screen. Tap-by-name has now executed for real at least once.
 
 **Code-complete but never executed on the device:**
-- **CALL_ACCEPT.** Needs a second phone to place a real ringing call. This is
-  one third of the demo scope and has never once been run. Highest-risk item.
+- **CALL_ACCEPT.** Tested for real at 21:13–21:14 and it failed — the permission
+  it depends on had never been declared. Repaired since (see CHANGELOG,
+  night 2) but **the repair itself is unverified**: the build carrying it was
+  never installed, because the device was disconnected. Install it, grant the
+  new Phone permission when prompted, and call the device again. Still the
+  highest-risk item on the board.
 - SCHEDULING alarm/timer — the permission was only actually granted as of the
   night build; every alarm attempt before it threw `SecurityException`. Never
   once seen to open the Clock app. Treat as unverified.
@@ -382,6 +394,34 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-12 (night, 2) — CALL_ACCEPT repair after its first real test
+First time a real ringing call reached the app. It failed three different ways
+in four utterances, and one of the failures reported SUCCESS.
+- **`ANSWER_PHONE_CALLS` was never declared.** §6 said `CommandExecutor` "already
+  falls back", which was true, but the primary path could never have worked —
+  `acceptRingingCall()` needs a runtime permission the app neither declared nor
+  requested. Declared, and `MainActivity` now requests it (with
+  `READ_PHONE_STATE`) as a separate step, so refusing it costs only CALL_ACCEPT.
+- **The false SUCCESS.** `acceptRingingCall()` returns `void`, and on some OEMs
+  it silently does nothing rather than throwing when the permission is absent.
+  The old code returned "Call answered" unconditionally. Telecom is now used
+  only when the permission is actually held; otherwise the node path runs.
+  A false success is worse than a failure — it suppresses the fallback and it
+  lies in the transcript log, which is our only research data.
+- **The node fallback searched one window.** A ringing call is a heads-up
+  notification in its own window, so `rootInActiveWindow` returned whatever was
+  on screen — often our own overlay. Added `getAllRoots()` to
+  `HandsFreeAccessibilityService` (purely additive; `getActiveRoot()` untouched)
+  and CALL_ACCEPT now searches every window and issues `ACTION_CLICK` on the
+  matched node rather than tapping its centre coordinate.
+- CALL_ACCEPT no longer requires the accessibility service, since Telecom
+  answers without it.
+- Lexicon: `oo` → answer and `hindi`/`wag`/`huwag` → reject, as JC asked, plus
+  `tang guihan`/`sa gutan` garble. **Note the trade-off:** `oo` and `hindi` are
+  ordinary words, so an utterance containing one alongside another command verb
+  now carries two intents — a rule 4.2 hazard accepted deliberately because
+  answering a call by saying "oo" is worth more than the edge case.
 
 ### 2026-08-12 (night) — 20:44–20:46 log triage
 - **The SET_ALARM permission name was wrong.** `android.permission.SET_ALARM`
