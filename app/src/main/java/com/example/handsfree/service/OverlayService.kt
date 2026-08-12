@@ -233,11 +233,12 @@ class OverlayService : Service() {
         emitResult(raw, normalized)
 
         val match = matcher?.classify(normalized)
+        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
         
         if (match == null) {
             val intentStr = "No match"
             val resultMsg = "No matching command"
-            val logEntry = "Narinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: FAILED - $resultMsg"
+            val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: FAILED - $resultMsg"
             transcriptHistory.add(0, logEntry)
             if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
             
@@ -253,7 +254,7 @@ class OverlayService : Service() {
             .getOrElse { CommandExecutor.Result(false, it.message ?: "Execution failed") }
 
         val statusStr = if (result.success) "SUCCESS" else "FAILED"
-        val logEntry = "Narinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: $statusStr - ${result.message}"
+        val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: $statusStr - ${result.message}"
         transcriptHistory.add(0, logEntry)
         if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
 
