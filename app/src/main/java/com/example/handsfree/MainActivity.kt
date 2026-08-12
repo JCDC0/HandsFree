@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -19,6 +20,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.example.handsfree.pipeline.LevenshteinMatcher
+import com.example.handsfree.service.HandsFreeAccessibilityService
 import com.example.handsfree.service.OverlayService
 import com.example.handsfree.util.CrashLog
 
@@ -44,10 +46,6 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var startButton: Button
     private lateinit var permButton: Button
     private lateinit var showLogButton: Button
-    private lateinit var modelButton: Button
-
-    /** Currently selected VOSK model — toggled by [modelButton]. */
-    private var currentLanguage: String = "en"
 
     /**
      * Previous handler captured so we can delegate after logging our own crash
@@ -130,7 +128,6 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startButton = findViewById(R.id.start_button)
         permButton = findViewById(R.id.perm_button)
         showLogButton = findViewById(R.id.show_log_button)
-        modelButton = findViewById(R.id.model_button)
 
         // Load LevenshteinMatcher for intent display in the debug UI
         levenshteinMatcher = runCatching {
@@ -138,37 +135,31 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             LevenshteinMatcher.fromAssets(json)
         }.getOrNull()
 
-        // Fresh start: clear all text, reset model to EN, reset state
+        // Fresh start: clear the debug fields and reset state.
         transcribedText.text = "..."
         translatedText.text = "..."
         intentText.text = "—"
-        statusText.text = "Ready — tap Start Mic & VOSK"
+        statusText.text = getString(R.string.activator_hint)
         statusText.setTextColor(Color.BLACK)
-        currentLanguage = "en"
-        modelButton.text = "Model: EN"
         pipelineActive = false
         startButton.text = "Start Listening"
         startButton.isEnabled = true
-        // If service is lingering from a previous session, force it to EN
-        val resetIntent = Intent(this, OverlayService::class.java).apply {
-            action = OverlayService.ACTION_SWITCH_MODEL
-            putExtra(OverlayService.EXTRA_LANGUAGE, "en")
-        }
-        startService(resetIntent)
 
         startButton.setOnClickListener {
             if (pipelineActive) {
                 stopOverlayService()
             } else if (hasRecordAudioPermission()) {
-                startOverlayService()
+                val missing = missingSetup()
+                if (missing.isEmpty()) {
+                    startOverlayService()
+                } else {
+                    statusText.setTextColor(Color.RED)
+                    statusText.text = "Enable first: ${missing.joinToString() }"
+                    Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
+                }
             } else {
                 requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
             }
-        }
-
-        modelButton.setOnClickListener {
-            val newLang = if (currentLanguage == "en") "tl" else "en"
-            switchModel(newLang)
         }
 
         permButton.setOnClickListener {
@@ -246,20 +237,32 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
      * user knows what to fix before tapping "Start Listening".
      */
     private fun updatePermissionStatus() {
-        val missing = mutableListOf<String>()
-        if (!hasRecordAudioPermission()) missing += "RECORD_AUDIO"
-        if (!Settings.canDrawOverlays(this)) missing += "OVERLAY"
+        val missing = missingSetup().toMutableList()
         if (missing.isNotEmpty()) {
             statusText.text = "Missing: ${missing.joinToString()} — grant before starting"
         } else if (statusText.text.toString().startsWith("Missing", ignoreCase = true)) {
-            statusText.text = "Ready — tap Start Mic & VOSK"
+            statusText.text = getString(R.string.activator_hint)
         }
+    }
+
+    private fun missingSetup(): List<String> = buildList {
+        if (!hasRecordAudioPermission()) add("RECORD_AUDIO")
+        if (!Settings.canDrawOverlays(this@MainActivity)) add("OVERLAY")
+        if (!isAccessibilityServiceEnabled()) add("ACCESSIBILITY")
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val enabled = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        val expected = ComponentName(this, HandsFreeAccessibilityService::class.java)
+        return enabled.split(':').any { ComponentName.unflattenFromString(it) == expected }
     }
 
     private fun startOverlayService() {
         val intent = Intent(this, OverlayService::class.java).apply {
             action = OverlayService.ACTION_START
-            putExtra(OverlayService.EXTRA_LANGUAGE, currentLanguage)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -284,21 +287,6 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startButton.text = "Start Listening"
         transcribedText.text = "..."
         translatedText.text = "..."
-    }
-
-    private fun switchModel(language: String) {
-        currentLanguage = language
-        modelButton.text = if (language == "en") "Model: EN" else "Model: TL"
-        val intent = Intent(this, OverlayService::class.java).apply {
-            action = OverlayService.ACTION_SWITCH_MODEL
-            putExtra(OverlayService.EXTRA_LANGUAGE, language)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-        Toast.makeText(this, "Switching to ${language.uppercase()} model...", Toast.LENGTH_SHORT).show()
     }
 
     // ---- OverlayService.PipelineListener ----
@@ -330,11 +318,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         runOnUiThread {
             statusText.text = status
             when (status) {
-                "PREPARING" -> showLoading("Loading speech model…\nFirst launch unpacks it — this can take a few seconds.")
-                "SWITCHING_MODEL" -> {
-                    startButton.isEnabled = false
-                    showLoading("Switching model…")
-                }
+                "PREPARING" -> showLoading("Loading speech model…\nFirst launch copies offline files.")
                 "LISTENING" -> {
                     hideLoading()
                     startButton.isEnabled = true
@@ -355,6 +339,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     hideLoading()
                     startButton.isEnabled = true
                     startButton.text = "Start Listening"
+                    pipelineActive = false
                     statusText.setTextColor(Color.RED)
                 }
             }
@@ -376,14 +361,12 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     override fun onPipelineError(message: String) {
         runOnUiThread {
-            // Transient errors during startup (e.g. VOSK model loading) should
-            // not flash red while the pipeline is still PREPARING.
-            if (statusText.text != "PREPARING") {
-                statusText.setTextColor(Color.RED)
-            }
+            hideLoading()
+            pipelineActive = false
+            startButton.isEnabled = true
+            startButton.text = "Start Listening"
+            statusText.setTextColor(Color.RED)
             statusText.text = message
-            errorClearHandler.removeCallbacks(errorClearRunnable)
-            errorClearHandler.postDelayed(errorClearRunnable, 3000L)
         }
     }
 }

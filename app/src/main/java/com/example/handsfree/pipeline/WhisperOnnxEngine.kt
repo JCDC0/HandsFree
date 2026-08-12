@@ -1,9 +1,23 @@
 package com.example.handsfree.pipeline
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
+import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
 import com.example.handsfree.util.CrashLog
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.log10
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 
 /**
  * Offline ASR backed by the team's fine-tuned Whisper-tiny model, exported to
@@ -11,14 +25,6 @@ import java.io.File
  *
  * Model: https://huggingface.co/KarlShane11/handsfree-whisper-tiny-tl
  * Baseline WER 82.72% -> fine-tuned 63.15% (23.7% relative reduction).
- *
- * ============================================================================
- * STATUS: WIRED BUT NOT YET LOADED. Waiting on the ONNX export from Karl.
- * ============================================================================
- *
- * Everything downstream of this class is finished. When the three export
- * artefacts land in `app/src/main/assets/whisper/`, set [MODEL_PRESENT] to true
- * and implement the two marked sections. Nothing else in the app changes.
  *
  * Expected assets, produced by sherpa-onnx's `export-onnx.py`:
  *   assets/whisper/encoder.onnx
@@ -55,12 +61,13 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
     /** Accumulates PCM until the VAD signals the utterance has ended. */
     private val utteranceBuffer = ArrayList<Short>(SAMPLE_RATE * 10)
 
-    // private var encoder: OrtSession? = null
-    // private var decoder: OrtSession? = null
-    // private var env: OrtEnvironment? = null
+    private var env: OrtEnvironment? = null
+    private var encoder: OrtSession? = null
+    private var decoder: OrtSession? = null
+    private val tokens = HashMap<Int, String>()
 
     override fun prepare(language: String) {
-        activeLanguage = language
+        activeLanguage = "tl"
         if (!MODEL_PRESENT) {
             val msg = "Whisper ONNX model not bundled yet — awaiting export from Karl. " +
                 "Drop encoder.onnx, decoder.onnx and tokens.txt into assets/whisper/ " +
@@ -73,27 +80,32 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
 
         Thread {
             try {
-                CrashLog.step(context, "WHISPER_1: copying assets to filesDir")
+                // ONNX Runtime's file-backed sessions cannot read APK assets
+                // directly. Copy the fixed export before creating either
+                // session so a clean install behaves the same as a warm one.
                 copyAssetsIfNeeded()
-
-                CrashLog.step(context, "WHISPER_2: creating ONNX sessions")
-                // ==================== IMPLEMENT WHEN MODEL LANDS ====================
-                // env = OrtEnvironment.getEnvironment()
-                // val opts = OrtSession.SessionOptions().apply {
-                //     setIntraOpNumThreads(2)
-                //     addNnapi()   // optional hardware acceleration; drop if unstable
-                // }
-                // encoder = env!!.createSession(modelPath(ENCODER_FILE), opts)
-                // decoder = env!!.createSession(modelPath(DECODER_FILE), opts)
-                // loadTokens(modelPath(TOKENS_FILE))
-                // ===================================================================
+                val runtime = OrtEnvironment.getEnvironment()
+                val options = OrtSession.SessionOptions()
+                try {
+                    options.setIntraOpNumThreads(2)
+                    options.setInterOpNumThreads(1)
+                    // Do not add NNAPI: the export is verified against CPU execution.
+                    options.addCPU(true)
+                    env = runtime
+                    encoder = runtime.createSession(modelPath(ENCODER_FILE), options)
+                    decoder = runtime.createSession(modelPath(DECODER_FILE), options)
+                } finally {
+                    options.close()
+                }
+                loadTokens(File(modelPath(TOKENS_FILE)))
+                CrashLog.ok(context, "WHISPER_2: CPU ONNX sessions and tokens loaded")
 
                 isReady = true
-                CrashLog.ok(context, "WHISPER_2")
                 onReady?.invoke()
             } catch (t: Throwable) {
                 Log.e(TAG, "Whisper init failed", t)
                 CrashLog.exception(context, "WhisperOnnxEngine.prepare", t)
+                release()
                 onError?.invoke(t)
             }
         }.apply { name = "whisper-init" }.start()
@@ -131,19 +143,60 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
         if (pcm.size < SAMPLE_RATE / 4) return null // under 250 ms — noise, not speech
 
         return try {
-            // ==================== IMPLEMENT WHEN MODEL LANDS ====================
-            // 1. Convert PCM Short -> Float, normalise to [-1, 1] by / 32768f
-            // 2. Compute the 80-bin log-Mel spectrogram, padded to 30 s (3000 frames)
-            // 3. encoder.run(mel) -> encoderOut
-            // 4. Greedy-decode with forced prefix tokens:
-            //      <|startoftranscript|> <|tl|> <|transcribe|> <|notimestamps|>
-            //    until <|endoftext|>
-            // 5. Detokenise via tokens.txt and strip special tokens
-            // ===================================================================
-            null
+            val normalized = FloatArray(pcm.size) { index ->
+                (pcm[index].toFloat() / PCM_SCALE).coerceIn(-1.0f, 1.0f)
+            }
+            val audio = FloatArray(N_SAMPLES)
+            normalized.copyInto(audio, endIndex = min(normalized.size, audio.size))
+
+            CrashLog.step(context, "WHISPER_3: computing [1,80,3000] log-Mel")
+            val mel = logMelSpectrogram(audio)
+            val encoded = runEncoder(mel)
+
+            CrashLog.step(context, "WHISPER_4: greedy decoder")
+            val zeroCache = FloatArray(CACHE_FLOATS)
+            var selfKey = zeroCache
+            var selfValue = zeroCache.copyOf()
+            var decoded = runDecoder(
+                tokenIds = FORCED_PREFIX,
+                offset = 0,
+                selfKey = selfKey,
+                selfValue = selfValue,
+                crossKey = encoded.crossKey,
+                crossValue = encoded.crossValue
+            )
+            selfKey = decoded.selfKey
+            selfValue = decoded.selfValue
+
+            // max_length includes the four forced-prefix positions in this export.
+            val maxGeneratedTokens = MAX_DECODE_TOKENS - FORCED_PREFIX.size
+            val generated = ArrayList<Int>(maxGeneratedTokens)
+            var nextToken = argmaxLast(decoded.logits, FORCED_PREFIX.size)
+            while (generated.size < maxGeneratedTokens && nextToken != TOKEN_EOT) {
+                generated += nextToken
+                if (generated.size == maxGeneratedTokens) break
+
+                decoded = runDecoder(
+                    tokenIds = intArrayOf(nextToken),
+                    offset = FORCED_PREFIX.size + generated.size - 1,
+                    selfKey = selfKey,
+                    selfValue = selfValue,
+                    crossKey = encoded.crossKey,
+                    crossValue = encoded.crossValue
+                )
+                selfKey = decoded.selfKey
+                selfValue = decoded.selfValue
+                nextToken = argmaxLast(decoded.logits, 1)
+            }
+
+            CrashLog.ok(context, "WHISPER_5: decoded ${generated.size} tokens")
+            detokenize(generated)
         } catch (t: Throwable) {
             Log.e(TAG, "inference failed", t)
             CrashLog.exception(context, "WhisperOnnxEngine.transcribe", t)
+            // Do not allow later audio callbacks to use a failed native session.
+            release()
+            onError?.invoke(t)
             null
         }
     }
@@ -154,8 +207,239 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
     override fun release() {
         isReady = false
         synchronized(utteranceBuffer) { utteranceBuffer.clear() }
-        // runCatching { encoder?.close(); decoder?.close(); env?.close() }
+        runCatching { encoder?.close() }
+        runCatching { decoder?.close() }
+        encoder = null
+        decoder = null
+        env = null
+        synchronized(tokens) { tokens.clear() }
         Log.i(TAG, "released")
+    }
+
+    private data class EncodedAudio(val crossKey: FloatArray, val crossValue: FloatArray)
+
+    private data class DecoderOutput(
+        val logits: FloatArray,
+        val selfKey: FloatArray,
+        val selfValue: FloatArray
+    )
+
+    private fun loadTokens(file: File) {
+        synchronized(tokens) {
+            tokens.clear()
+            file.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    val fields = line.trim().split(WHITESPACE)
+                    if (fields.size < 2) return@forEach
+                    val id = fields[1].toIntOrNull() ?: return@forEach
+                    if (id > TOKENS_MAX_TEXT_ID) return@forEach
+                    val bytes = Base64.decode(fields[0], Base64.DEFAULT)
+                    tokens[id] = bytes.toString(Charsets.UTF_8)
+                }
+            }
+        }
+        if (tokens.size <= TOKENS_MAX_TEXT_ID / 2) {
+            error("tokens.txt loaded only ${tokens.size} text tokens")
+        }
+    }
+
+    private fun runEncoder(mel: FloatArray): EncodedAudio {
+        val runtime = env ?: error("ONNX environment is not ready")
+        val session = encoder ?: error("Whisper encoder is not ready")
+        val input = floatTensor(runtime, mel, longArrayOf(1, N_MELS.toLong(), MEL_FRAMES.toLong()))
+        val result = session.run(mapOf(ENCODER_INPUT to input))
+        return try {
+            EncodedAudio(readFloatTensor(result[0]), readFloatTensor(result[1]))
+        } finally {
+            result.close()
+            input.close()
+        }
+    }
+
+    private fun runDecoder(
+        tokenIds: IntArray,
+        offset: Int,
+        selfKey: FloatArray,
+        selfValue: FloatArray,
+        crossKey: FloatArray,
+        crossValue: FloatArray
+    ): DecoderOutput {
+        val runtime = env ?: error("ONNX environment is not ready")
+        val session = decoder ?: error("Whisper decoder is not ready")
+        val inputTokens = longTensor(runtime, LongArray(tokenIds.size) { tokenIds[it].toLong() }, longArrayOf(1, tokenIds.size.toLong()))
+        val inputSelfKey = floatTensor(runtime, selfKey, CACHE_SHAPE)
+        val inputSelfValue = floatTensor(runtime, selfValue, CACHE_SHAPE)
+        val inputCrossKey = floatTensor(runtime, crossKey, CROSS_SHAPE)
+        val inputCrossValue = floatTensor(runtime, crossValue, CROSS_SHAPE)
+        val inputOffset = longTensor(runtime, longArrayOf(offset.toLong()), longArrayOf(1))
+        val result = session.run(
+            mapOf(
+                DECODER_TOKENS to inputTokens,
+                DECODER_SELF_KEY to inputSelfKey,
+                DECODER_SELF_VALUE to inputSelfValue,
+                DECODER_CROSS_KEY to inputCrossKey,
+                DECODER_CROSS_VALUE to inputCrossValue,
+                DECODER_OFFSET to inputOffset
+            )
+        )
+        return try {
+            DecoderOutput(
+                logits = readFloatTensor(result[0]),
+                selfKey = readFloatTensor(result[1]),
+                selfValue = readFloatTensor(result[2])
+            )
+        } finally {
+            result.close()
+            inputTokens.close()
+            inputSelfKey.close()
+            inputSelfValue.close()
+            inputCrossKey.close()
+            inputCrossValue.close()
+            inputOffset.close()
+        }
+    }
+
+    private fun argmaxLast(logits: FloatArray, sequenceLength: Int): Int {
+        val start = (sequenceLength - 1) * VOCAB_SIZE
+        var bestId = 0
+        var bestValue = Float.NEGATIVE_INFINITY
+        for (id in 0 until VOCAB_SIZE) {
+            val value = logits[start + id]
+            if (value > bestValue) {
+                bestValue = value
+                bestId = id
+            }
+        }
+        return bestId
+    }
+
+    private fun detokenize(ids: List<Int>): String {
+        val output = StringBuilder()
+        synchronized(tokens) {
+            ids.forEach { id ->
+                if (id >= TOKENS_MAX_TEXT_ID) return@forEach
+                val token = tokens[id] ?: return@forEach
+                if (!token.startsWith("<|") || !token.endsWith("|>")) output.append(token)
+            }
+        }
+        return output.toString().trim()
+    }
+
+    private fun floatTensor(runtime: OrtEnvironment, values: FloatArray, shape: LongArray): OnnxTensor {
+        val buffer = ByteBuffer
+            .allocateDirect(values.size * java.lang.Float.BYTES)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+        buffer.put(values)
+        buffer.flip()
+        return OnnxTensor.createTensor(runtime, buffer, shape)
+    }
+
+    private fun longTensor(runtime: OrtEnvironment, values: LongArray, shape: LongArray): OnnxTensor {
+        val buffer = ByteBuffer
+            .allocateDirect(values.size * java.lang.Long.BYTES)
+            .order(ByteOrder.nativeOrder())
+            .asLongBuffer()
+        buffer.put(values)
+        buffer.flip()
+        return OnnxTensor.createTensor(runtime, buffer, shape)
+    }
+
+    private fun readFloatTensor(value: Any): FloatArray {
+        val tensor = value as? OnnxTensor ?: error("Expected ONNX tensor, got ${value.javaClass.name}")
+        val buffer = tensor.getFloatBuffer()
+        val output = FloatArray(buffer.remaining())
+        buffer.get(output)
+        return output
+    }
+
+    /**
+     * Reproduces Whisper's torch.stft front end: centered reflect padding,
+     * periodic Hann window, 400-point FFT, and removal of the 3001st frame.
+     */
+    private fun logMelSpectrogram(audio: FloatArray): FloatArray {
+        val logMel = FloatArray(N_MELS * MEL_FRAMES)
+        var maximum = Float.NEGATIVE_INFINITY
+
+        for (frame in 0 until MEL_FRAMES) {
+            val real = DoubleArray(N_FFT)
+            val imaginary = DoubleArray(N_FFT)
+            val frameStart = frame * HOP_LENGTH - N_FFT / 2
+            for (sample in 0 until N_FFT) {
+                val source = reflectIndex(frameStart + sample, audio.size)
+                real[sample] = audio[source].toDouble() * HANN_WINDOW[sample]
+            }
+            val spectrum = fft(real, imaginary)
+            val power = FloatArray(N_FFT / 2 + 1)
+            for (bin in power.indices) {
+                power[bin] = (spectrum.real[bin] * spectrum.real[bin] +
+                    spectrum.imaginary[bin] * spectrum.imaginary[bin]).toFloat()
+            }
+
+            for (melBin in 0 until N_MELS) {
+                var energy = 0.0
+                val filter = MEL_FILTERS[melBin]
+                for (bin in power.indices) energy += filter[bin] * power[bin]
+                val value = log10(max(energy, 1e-10)).toFloat()
+                logMel[melBin * MEL_FRAMES + frame] = value
+                if (value > maximum) maximum = value
+            }
+        }
+
+        val floor = maximum - 8.0f
+        for (index in logMel.indices) {
+            logMel[index] = (max(logMel[index], floor) + 4.0f) / 4.0f
+        }
+        return logMel
+    }
+
+    private fun reflectIndex(index: Int, length: Int): Int {
+        var result = index
+        while (result < 0 || result >= length) {
+            result = if (result < 0) -result else 2 * length - 2 - result
+        }
+        return result
+    }
+
+    private data class ComplexArray(val real: DoubleArray, val imaginary: DoubleArray)
+
+    /** Mixed-radix Cooley–Tukey FFT for the required composite size 400. */
+    private fun fft(real: DoubleArray, imaginary: DoubleArray): ComplexArray {
+        if (real.size == 1) return ComplexArray(real, imaginary)
+        val radix = if (real.size % 2 == 0) 2 else 5
+        val subLength = real.size / radix
+        val subTransforms = Array(radix) { branch ->
+            val subReal = DoubleArray(subLength)
+            val subImaginary = DoubleArray(subLength)
+            for (index in 0 until subLength) {
+                subReal[index] = real[radix * index + branch]
+                subImaginary[index] = imaginary[radix * index + branch]
+            }
+            fft(subReal, subImaginary)
+        }
+        val outputReal = DoubleArray(real.size)
+        val outputImaginary = DoubleArray(real.size)
+        val outerTwiddle = twiddles(real.size)
+
+        for (frequency in 0 until subLength) {
+            for (radixFrequency in 0 until radix) {
+                var sumReal = 0.0
+                var sumImaginary = 0.0
+                for (branch in 0 until radix) {
+                    val phase = (frequency + subLength * radixFrequency) * branch % real.size
+                    val c = outerTwiddle.cosine[phase]
+                    val s = outerTwiddle.sine[phase]
+                    val valueReal = subTransforms[branch].real[frequency]
+                    val valueImaginary = subTransforms[branch].imaginary[frequency]
+                    sumReal += valueReal * c - valueImaginary * s
+                    sumImaginary += valueReal * s + valueImaginary * c
+                }
+                val outputIndex = frequency + subLength * radixFrequency
+                outputReal[outputIndex] = sumReal
+                outputImaginary[outputIndex] = sumImaginary
+            }
+        }
+        return ComplexArray(outputReal, outputImaginary)
     }
 
     // ---- asset plumbing ----
@@ -199,10 +483,66 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
          * FLIP THIS TO TRUE only after a real .wav has been transcribed
          * end to end and the output matches Karl's notebook for that file.
          */
-        const val INFERENCE_IMPLEMENTED = false
+        const val INFERENCE_IMPLEMENTED = true
 
         /** Whisper is usable only when both are true. */
         val USABLE: Boolean get() = MODEL_PRESENT && INFERENCE_IMPLEMENTED
+
+        private const val SAMPLE_RATE = 16000
+        private const val PCM_SCALE = 32768.0f
+        private const val VOCAB_SIZE = 51865
+        private const val CACHE_FLOATS = 4 * 448 * 384
+        private val CACHE_SHAPE = longArrayOf(4, 1, MAX_DECODE_TOKENS.toLong(), 384)
+        private val CROSS_SHAPE = longArrayOf(4, 1, ENCODER_FRAMES.toLong(), 384)
+        private val WHITESPACE = Regex("\\s+")
+
+        private const val ENCODER_INPUT = "mel"
+        private const val DECODER_TOKENS = "tokens"
+        private const val DECODER_SELF_KEY = "in_n_layer_self_k_cache"
+        private const val DECODER_SELF_VALUE = "in_n_layer_self_v_cache"
+        private const val DECODER_CROSS_KEY = "n_layer_cross_k"
+        private const val DECODER_CROSS_VALUE = "n_layer_cross_v"
+        private const val DECODER_OFFSET = "offset"
+
+        private data class Twiddles(val cosine: DoubleArray, val sine: DoubleArray)
+        private val twiddleCache = ConcurrentHashMap<Int, Twiddles>()
+        private val HANN_WINDOW = DoubleArray(N_FFT) { index ->
+            0.5 - 0.5 * cos(2.0 * Math.PI * index / N_FFT)
+        }
+        private val MEL_FILTERS: Array<FloatArray> by lazy { createMelFilterBank() }
+
+        private fun twiddles(size: Int): Twiddles = twiddleCache.computeIfAbsent(size) {
+            Twiddles(
+                cosine = DoubleArray(size) { index -> cos(-2.0 * Math.PI * index / size) },
+                sine = DoubleArray(size) { index -> sin(-2.0 * Math.PI * index / size) }
+            )
+        }
+
+        /** Same Slaney-normalized bank as Whisper's published mel_filters.npz. */
+        private fun createMelFilterBank(): Array<FloatArray> {
+            val fSp = 200.0 / 3.0
+            val minLogHz = 1000.0
+            val minLogMel = minLogHz / fSp
+            val logStep = ln(6.4) / 27.0
+            fun hzToMel(hz: Double): Double =
+                if (hz < minLogHz) hz / fSp else minLogMel + ln(hz / minLogHz) / logStep
+            fun melToHz(mel: Double): Double =
+                if (mel < minLogMel) fSp * mel else minLogHz * exp(logStep * (mel - minLogMel))
+
+            val melPoints = DoubleArray(N_MELS + 2) { index ->
+                melToHz(hzToMel(0.0) + index * (hzToMel(SAMPLE_RATE / 2.0) - hzToMel(0.0)) / (N_MELS + 1))
+            }
+            val differences = DoubleArray(N_MELS + 1) { index -> melPoints[index + 1] - melPoints[index] }
+            return Array(N_MELS) { melBin ->
+                FloatArray(N_FFT / 2 + 1) { bin ->
+                    val frequency = SAMPLE_RATE * bin.toDouble() / N_FFT
+                    val lower = (melPoints[melBin] - frequency) / differences[melBin]
+                    val upper = (frequency - melPoints[melBin + 2]) / differences[melBin + 1]
+                    (max(0.0, min(lower, upper)) * 2.0 /
+                        (melPoints[melBin + 2] - melPoints[melBin])).toFloat()
+                }
+            }
+        }
 
         // ------------------------------------------------------------------
         // Token IDs — read directly from the fine-tuned model's
@@ -246,6 +586,7 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
         const val N_FFT = 400
         const val HOP_LENGTH = 160
         const val CHUNK_SECONDS = 30
+        private const val N_SAMPLES = SAMPLE_RATE * CHUNK_SECONDS
         const val MEL_FRAMES = 3000        // 30 s * 16000 / 160
         const val ENCODER_FRAMES = 1500    // config.max_source_positions
 
@@ -254,7 +595,6 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
         const val DECODER_FILE = "decoder.onnx"
         const val TOKENS_FILE = "tokens.txt"
 
-        private const val SAMPLE_RATE = 16000
         private const val MAX_UTTERANCE_SECONDS = 25
     }
 }

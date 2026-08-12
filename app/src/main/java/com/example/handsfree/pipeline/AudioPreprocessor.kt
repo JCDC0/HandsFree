@@ -42,8 +42,10 @@ class AudioPreprocessor(private val context: Context? = null) {
      *
      * @param callback invoked for every audio chunk whose RMS exceeds the VAD
      *        threshold. Receiver is invoked on a background thread.
+     * @param onError invoked when the recorder cannot start or the capture loop
+     *        encounters an unrecoverable read/callback failure.
      */
-    fun startCapture(callback: (ShortArray) -> Unit) {
+    fun startCapture(callback: (ShortArray) -> Unit, onError: ((Throwable) -> Unit)? = null) {
         if (isCapturing) {
             Log.w(TAG, "startCapture: already running")
             return
@@ -55,7 +57,11 @@ class AudioPreprocessor(private val context: Context? = null) {
                 AudioFormat.ENCODING_PCM_16BIT
             )
             if (minBuf == AudioRecord.ERROR || minBuf == AudioRecord.ERROR_BAD_VALUE) {
-                Log.e(TAG, "AudioRecord.getMinBufferSize returned error code $minBuf")
+                val error = IllegalStateException(
+                    "AudioRecord.getMinBufferSize returned error code $minBuf"
+                )
+                Log.e(TAG, error.message ?: "AudioRecord buffer-size failure")
+                onError?.invoke(error)
                 return
             }
             // Buffer must hold at least a few chunks; size in bytes = shorts * 2.
@@ -68,8 +74,12 @@ class AudioPreprocessor(private val context: Context? = null) {
                 bufferSizeInShorts * 2
             )
             if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord failed to initialize (state=${recorder.state})")
+                val error = IllegalStateException(
+                    "AudioRecord failed to initialize (state=${recorder.state})"
+                )
+                Log.e(TAG, error.message ?: "AudioRecord initialization failure")
                 recorder.release()
+                onError?.invoke(error)
                 return
             }
             if (context != null) CrashLog.step(context, "STEP_10: AudioRecord.startRecording")
@@ -88,12 +98,25 @@ class AudioPreprocessor(private val context: Context? = null) {
                 while (isActive && isCapturing) {
                     val read = recorder.read(buffer, 0, buffer.size)
                     if (read <= 0) {
-                        if (read < 0) Log.w(TAG, "AudioRecord.read error code: $read")
+                        if (read < 0) {
+                            val error = IllegalStateException("AudioRecord.read error code: $read")
+                            Log.e(TAG, error.message ?: "AudioRecord read failure")
+                            onError?.invoke(error)
+                            isCapturing = false
+                            break
+                        }
                         continue
                     }
                     val slice = if (read == buffer.size) buffer.copyOf() else buffer.copyOfRange(0, read)
                     if (hasSpeech(slice)) {
-                        callback(slice)
+                        try {
+                            callback(slice)
+                        } catch (t: Throwable) {
+                            Log.e(TAG, "audio callback failed", t)
+                            onError?.invoke(t)
+                            isCapturing = false
+                            break
+                        }
                     }
                 }
                 Log.i(TAG, "Capture loop exiting")
@@ -102,10 +125,12 @@ class AudioPreprocessor(private val context: Context? = null) {
             Log.e(TAG, "RECORD_AUDIO permission not granted", se)
             audioRecord?.release()
             audioRecord = null
+            onError?.invoke(se)
         } catch (t: Throwable) {
             Log.e(TAG, "startCapture failed", t)
             audioRecord?.release()
             audioRecord = null
+            onError?.invoke(t)
         }
     }
 

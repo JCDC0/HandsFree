@@ -295,19 +295,32 @@ Do not attempt Messaging or Scheduling live, even if they appear to work.
 
 ## 9. Current state — update this section
 
-**Last verified:** 2026-08-12, commit `2491a90`, `./gradlew assembleDebug` green,
-APK 48.17 MB.
+**Last verified:** 2026-08-12 15:41 PHT, `./gradlew assembleDebug` green,
+APK 251.95 MB (includes Whisper ONNX models).
 
-**Working:** full VOSK pipeline; activation by volume-key and bubble; app launch
-with fuzzy name matching; call accept/decline; navigation (back, home, recents,
-scroll, tap-by-name); loading dialog; command success/failure reporting.
+**Speech backend:** Karl's fine-tuned Whisper-tiny-tl ONNX export.
+`INFERENCE_IMPLEMENTED = true`. The full pipeline is:
+AudioPreprocessor → WhisperOnnxEngine → TranslationLayer →
+LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
 
-**Not working:** Whisper inference (awaiting export). `AppStateMachine` is
-scaffolded but unwired, so multi-turn commands hold no context.
+**Working code (not yet tested on hardware):**
+- Whisper ONNX inference (log-Mel, encoder, decoder, greedy decode)
+- Activation by volume-key hold and floating bubble
+- APP_LAUNCH with fuzzy Levenshtein matching against installed packages
+- CALL_ACCEPT / CALL_DECLINE via TelecomManager + node-tree fallback
+- NAVIGATION: back, home, recents, scroll, notifications, tap-by-name
+- Loading dialog during model preparation
+- Command success/failure reporting in debug UI and notification
+
+**Not wired:** `AppStateMachine.kt` (scaffolded, never instantiated).
+Multi-turn commands hold no context — each utterance is independent.
 
 **Untested on hardware:** the volume-key activator. Some OEM skins intercept
 volume keys before accessibility services see them. **Test this first — it is
 the demo's opening move and there is a fallback only if you know early.**
+
+**Obsolete docs moved to `junk/`:** TASKS.md, CURRENT_WORK_REPORT.md,
+HandsFree_Team_Plan_Simple.pdf.
 
 ---
 
@@ -324,6 +337,19 @@ the demo's opening move and there is a fallback only if you know early.**
 
 ## CHANGELOG
 
+### 2026-08-12 (afternoon) — Whisper enabled, pipeline unblocked
+- Set `WhisperOnnxEngine.INFERENCE_IMPLEMENTED = true`.
+- Removed `INFERENCE_IMPLEMENTED` gates from `OverlayService.onReady` and
+  `startListening()` — the pipeline now starts without verification checkpoint.
+- Changed UI labels from "Start Whisper" to "Start Listening".
+- Expanded `translation-lexicon.json` from 48 to ~90 entries (added multi-word
+  Tagalog phrases like "buksan mo ang", common particles, device vocabulary).
+- Expanded `intent-vocabulary.json` with Tagalog trigger words and additional
+  navigation phrases. Removed 'call'/'dial'/'phone' from CALL_ACCEPT to
+  prevent Levenshtein collisions with APP_LAUNCH.
+- Moved obsolete MD files to `junk/`.
+- Build verified green, APK 252 MB.
+
 ### 2026-08-12 — activation, command execution, Whisper prep (`2491a90`)
 - Added `SpeechEngine` interface, `WhisperOnnxEngine` (wired, not loaded),
   `VoskEngineAdapter`.
@@ -336,3 +362,4 @@ the demo's opening move and there is a fallback only if you know early.**
 - Added volume-down-hold activator and draggable mic bubble.
 - Mic no longer held open continuously — idle, listen once, act, sleep (8 s).
 - Added loading dialog and command result reporting.
+

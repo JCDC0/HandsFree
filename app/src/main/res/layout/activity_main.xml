@@ -187,20 +187,10 @@
             android:id="@+id/start_button"
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:text="▶  Start Mic &amp; VOSK"
+            android:text="▶  Start Listening"
             android:textSize="15sp"
             android:backgroundTint="#1A1A2E"
             android:textColor="#FFFFFF"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/model_button"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Model: EN"
-            android:textSize="14sp"
-            android:backgroundTint="#EEEEEE"
-            android:textColor="#333333"
             android:layout_marginBottom="10dp" />
 
         <Button

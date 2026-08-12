@@ -25,13 +25,13 @@ import com.example.handsfree.pipeline.CommandExecutor
 import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.pipeline.SpeechEngine
 import com.example.handsfree.pipeline.TranslationLayer
-import com.example.handsfree.pipeline.VoskEngineAdapter
 import com.example.handsfree.pipeline.WhisperOnnxEngine
 import com.example.handsfree.util.CrashLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Foreground service hosting the HandsFree pipeline:
@@ -39,9 +39,8 @@ import kotlinx.coroutines.cancel
  *   AudioPreprocessor -> SpeechEngine -> TranslationLayer
  *       -> LevenshteinMatcher -> CommandExecutor -> AccessibilityService
  *
- * The engine behind [SpeechEngine] is chosen at startup: the fine-tuned
- * Whisper ONNX build when its assets are present, otherwise VOSK, so the
- * pipeline stays testable while the export is outstanding.
+ * The demo uses Karl's fixed Tagalog Whisper ONNX export. The model is prepared
+ * off the main thread before the activation controls can start microphone work.
  *
  * Activation model. The microphone is not held open indefinitely — that drains
  * battery and unnerves users. Instead the service idles until woken by either
@@ -63,6 +62,7 @@ class OverlayService : Service() {
 
     @Volatile private var pipelineRunning = false
     @Volatile private var listening = false
+    @Volatile private var startWhenReady = false
 
     private var windowManager: WindowManager? = null
     private var bubbleView: View? = null
@@ -121,33 +121,24 @@ class OverlayService : Service() {
             CrashLog.info(this@OverlayService, "engine ready: ${speechEngine.displayName}")
             emitStatus(STATUS_IDLE)
             showBubble()
+            if (startWhenReady) {
+                startWhenReady = false
+                startListening()
+            }
         }
-        speechEngine.onError = { e ->
-            CrashLog.exception(this@OverlayService, "engine error", e)
-            emitStatus(STATUS_MODEL_ERROR)
-            emitError(e.message ?: e.javaClass.simpleName)
-        }
-        speechEngine.prepare(if (speechEngine is WhisperOnnxEngine) "tl" else "en")
+        speechEngine.onError = { e -> handleBackendError(e) }
+        speechEngine.prepare("tl")
     }
 
-    /**
-     * Whisper when its assets are bundled, VOSK otherwise.
-     *
-     * Flip [WhisperOnnxEngine.MODEL_PRESENT] once the ONNX export lands and the
-     * app switches over with no other change.
-     */
-    private fun createEngine(): SpeechEngine =
-        if (WhisperOnnxEngine.USABLE) {
-            Log.i(TAG, "using Whisper ONNX engine")
-            WhisperOnnxEngine(this)
-        } else {
-            Log.i(
-                TAG,
-                "Whisper not usable (present=${WhisperOnnxEngine.MODEL_PRESENT} " +
-                    "implemented=${WhisperOnnxEngine.INFERENCE_IMPLEMENTED}) — using VOSK"
-            )
-            VoskEngineAdapter(this)
-        }
+    /** The demo has one speech backend: Karl's fixed Tagalog Whisper export. */
+    private fun createEngine(): SpeechEngine {
+        Log.i(
+            TAG,
+            "using Whisper ONNX engine (present=${WhisperOnnxEngine.MODEL_PRESENT}, " +
+                "verified=${WhisperOnnxEngine.INFERENCE_IMPLEMENTED})"
+        )
+        return WhisperOnnxEngine(this)
+    }
 
     // ---- activation ----
 
@@ -155,7 +146,8 @@ class OverlayService : Service() {
     private fun startListening() {
         if (listening) return
         if (!speechEngine.isReady) {
-            emitError("Model still loading…")
+            startWhenReady = true
+            emitStatus(STATUS_PREPARING)
             return
         }
         listening = true
@@ -169,25 +161,60 @@ class OverlayService : Service() {
     private fun stopListening(reason: String) {
         if (!listening) return
         listening = false
+        startWhenReady = false
         mainHandler.removeCallbacks(sleepRunnable)
         audioPreprocessor.stopCapture()
         pipelineRunning = false
         emitStatus(STATUS_IDLE)
         updateBubble("🎤", 0xFF1E88E5.toInt())
         Log.i(TAG, "stopped listening: $reason")
+        flushWhisperUtterance()
+    }
+
+    /** Whisper emits one result after the listening window, not per audio chunk. */
+    private fun flushWhisperUtterance() {
+        val whisper = speechEngine as? WhisperOnnxEngine ?: return
+        scope.launch {
+            val raw = whisper.onUtteranceComplete()
+            if (!raw.isNullOrBlank()) {
+                mainHandler.post { handleUtterance(raw) }
+            }
+        }
     }
 
     private fun startPipeline() {
         if (pipelineRunning) return
         pipelineRunning = true
-        audioPreprocessor.startCapture { buffer ->
-            val raw = speechEngine.acceptWaveform(buffer)
-            if (raw != null && raw.isNotBlank()) {
-                handleUtterance(raw)
-            } else {
-                val partial = speechEngine.getPartialResult()
-                if (partial.isNotEmpty()) emitPartial(partial)
-            }
+        audioPreprocessor.startCapture(
+            callback = { buffer ->
+                val raw = speechEngine.acceptWaveform(buffer)
+                if (raw != null && raw.isNotBlank()) {
+                    handleUtterance(raw)
+                } else {
+                    val partial = speechEngine.getPartialResult()
+                    if (partial.isNotEmpty()) emitPartial(partial)
+                }
+            },
+            onError = { error -> handleBackendError(error) }
+        )
+    }
+
+    /**
+     * Put every fatal model/audio failure back into a recoverable service state.
+     * Failures can originate on the model-init or audio-capture threads.
+     */
+    private fun handleBackendError(error: Throwable) {
+        val message = error.message ?: error.javaClass.simpleName
+        mainHandler.post {
+            CrashLog.exception(this@OverlayService, "backend error", error)
+            listening = false
+            pipelineRunning = false
+            startWhenReady = false
+            mainHandler.removeCallbacks(sleepRunnable)
+            runCatching { audioPreprocessor.stopCapture() }
+            updateBubble("🎤", 0xFF1E88E5.toInt())
+            emitStatus(STATUS_MODEL_ERROR)
+            emitError(message)
         }
     }
 
@@ -310,13 +337,9 @@ class OverlayService : Service() {
         when (intent?.action) {
             ACTION_ACTIVATE -> if (listening) stopListening("toggle") else startListening()
             ACTION_START -> startListening()
-            ACTION_STOP_PIPELINE -> stopListening("explicit stop")
-            ACTION_SWITCH_MODEL -> {
-                val lang = intent.getStringExtra(EXTRA_LANGUAGE) ?: "en"
-                if (lang != speechEngine.activeLanguage) {
-                    emitStatus(STATUS_SWITCHING)
-                    speechEngine.switchModel(lang)
-                }
+            ACTION_STOP_PIPELINE -> {
+                startWhenReady = false
+                stopListening("explicit stop")
             }
         }
         return START_STICKY
@@ -381,17 +404,12 @@ class OverlayService : Service() {
 
         const val ACTION_START = "com.example.handsfree.START"
         const val ACTION_STOP_PIPELINE = "com.example.handsfree.STOP_PIPELINE"
-        const val ACTION_SWITCH_MODEL = "com.example.handsfree.SWITCH_MODEL"
-
         /** Wake or sleep the listener. Sent by the bubble and the volume-key activator. */
         const val ACTION_ACTIVATE = "com.example.handsfree.ACTIVATE"
-
-        const val EXTRA_LANGUAGE = "language"
 
         const val STATUS_PREPARING = "PREPARING"
         const val STATUS_IDLE = "IDLE"
         const val STATUS_LISTENING = "LISTENING"
-        const val STATUS_SWITCHING = "SWITCHING_MODEL"
         const val STATUS_MODEL_ERROR = "MODEL_ERROR"
 
         @Volatile
