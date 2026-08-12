@@ -45,7 +45,7 @@ class AudioPreprocessor(private val context: Context? = null) {
      * @param onError invoked when the recorder cannot start or the capture loop
      *        encounters an unrecoverable read/callback failure.
      */
-    fun startCapture(callback: (ShortArray) -> Unit, onError: ((Throwable) -> Unit)? = null) {
+    fun startCapture(callback: (ShortArray) -> Unit, onSilenceDetected: (() -> Unit)? = null, onError: ((Throwable) -> Unit)? = null) {
         if (isCapturing) {
             Log.w(TAG, "startCapture: already running")
             return
@@ -95,6 +95,10 @@ class AudioPreprocessor(private val context: Context? = null) {
 
             captureJob = scope.launch {
                 val buffer = ShortArray(CHUNK_FRAMES)
+                var silentChunks = 0
+                val silenceThresholdChunks = 23 // ~1.5s at 64ms/chunk
+                var hasHeardSpeech = false
+
                 while (isActive && isCapturing) {
                     val read = recorder.read(buffer, 0, buffer.size)
                     if (read <= 0) {
@@ -108,6 +112,20 @@ class AudioPreprocessor(private val context: Context? = null) {
                         continue
                     }
                     val slice = if (read == buffer.size) buffer.copyOf() else buffer.copyOfRange(0, read)
+                    
+                    if (hasSpeech(slice)) {
+                        silentChunks = 0
+                        hasHeardSpeech = true
+                    } else if (hasHeardSpeech) {
+                        silentChunks++
+                        if (silentChunks >= silenceThresholdChunks) {
+                            Log.i(TAG, "trailing silence detected, notifying caller")
+                            onSilenceDetected?.invoke()
+                            silentChunks = 0
+                            hasHeardSpeech = false
+                        }
+                    }
+
                     try {
                         callback(slice)
                     } catch (t: Throwable) {

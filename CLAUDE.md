@@ -338,10 +338,16 @@ HandsFree_Team_Plan_Simple.pdf.
 ## CHANGELOG
 
 ### 2026-08-12 (late afternoon) — Device Testing Fixes
-- **Critical Fix:** Added `FOREGROUND_SERVICE_MICROPHONE` and `foregroundServiceType="microphone"` to `OverlayService.kt` and `AndroidManifest.xml`. On Android 11+, background services without this explicitly declared are silently blocked from the microphone, receiving pure digital zeroes (which was causing Whisper to continuously hallucinate the `[Polong]` token).
-- Removed chunk-dropping Voice Activity Detection (VAD) from `AudioPreprocessor`. Feeding Whisper continuous, naturally paced audio rather than tightly packed non-silent chunks resolves the `[Polong]` hallucination issue.
+- **Critical Fix:** Fixed two severe mathematical bugs in the Whisper ONNX audio preprocessing pipeline that were destroying audio data and causing the `[Polong]` hallucination:
+  1. The Slaney mel filter bank calculation inverted its subtraction `(start - frequency)` instead of `(frequency - start)`, causing it to output negative values which were clamped to 0.0. Every filter evaluated to 0.0, passing complete silence to Whisper.
+  2. The Cooley-Tukey FFT recombination loop calculated its phase angle using `subLength * radixFrequency` instead of `branch * subLength`, scrambling the complex frequencies of the input audio.
+- **Critical Fix:** Added `FOREGROUND_SERVICE_MICROPHONE` and `foregroundServiceType="microphone"` to `OverlayService.kt` and `AndroidManifest.xml`. On Android 11+, background services without this explicitly declared are silently blocked from the microphone, receiving pure digital zeroes.
+- Removed chunk-dropping Voice Activity Detection (VAD) from `AudioPreprocessor`. Feeding Whisper continuous, naturally paced audio rather than tightly packed non-silent chunks resolves further hallucination issues.
 - Re-wired `HandsFreeAccessibilityService` to directly support the system's Accessibility Button, bypassing OEM OS layers that were intercepting volume key combinations.
-- Implemented automated permission chaining in `MainActivity`'s setup flow.
+- Implemented automated permission chaining in `MainActivity`'s setup flow, which now launches automatically in `onResume()` on first install.
+- Implemented a Google Assistant-style bottom popup UI (`popup_assistant.xml`) that displays real-time state, Tagalog transcriptions, and executed intents.
+- Added dynamic Voice Activity Detection (VAD) trailing silence logic to `AudioPreprocessor` to automatically stop recording ~1.5s after the user stops speaking.
+- Added `pakibuksan` to `translation-lexicon.json`.
 
 ### 2026-08-12 (afternoon) — Whisper enabled, pipeline unblocked
 - Set `WhisperOnnxEngine.INFERENCE_IMPLEMENTED = true`.

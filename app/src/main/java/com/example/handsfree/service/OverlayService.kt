@@ -68,6 +68,11 @@ class OverlayService : Service() {
     private var bubbleView: View? = null
     private var bubbleLabel: TextView? = null
 
+    private var popupView: View? = null
+    private var popupStatusText: TextView? = null
+    private var popupTranscriptionText: TextView? = null
+    private var popupIntentText: TextView? = null
+
     private val sleepRunnable = Runnable {
         if (listening) {
             Log.i(TAG, "listening window elapsed — returning to idle")
@@ -195,6 +200,9 @@ class OverlayService : Service() {
                     if (partial.isNotEmpty()) emitPartial(partial)
                 }
             },
+            onSilenceDetected = {
+                mainHandler.post { stopListening("Silence detected (VAD)") }
+            },
             onError = { error -> handleBackendError(error) }
         )
     }
@@ -314,15 +322,84 @@ class OverlayService : Service() {
         bubbleView = null; bubbleLabel = null
     }
 
+    private fun showAssistantPopup() {
+        mainHandler.post {
+            if (popupView != null) return@post
+            val wm = getSystemService(WindowManager::class.java) ?: return@post
+            windowManager = wm
+
+            val inflater = android.view.LayoutInflater.from(this)
+            val view = inflater.inflate(R.layout.popup_assistant, null)
+            popupView = view
+            popupStatusText = view.findViewById(R.id.popup_status_text)
+            popupTranscriptionText = view.findViewById(R.id.popup_transcription_text)
+            popupIntentText = view.findViewById(R.id.popup_intent_text)
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                y = 100 // Slight bottom margin
+                windowAnimations = android.R.style.Animation_Dialog
+            }
+
+            runCatching { wm.addView(view, params) }
+                .onFailure { Log.e(TAG, "popup add failed", it) }
+        }
+    }
+
+    private fun hideAssistantPopup() {
+        mainHandler.post {
+            val v = popupView ?: return@post
+            runCatching { windowManager?.removeView(v) }
+            popupView = null; popupStatusText = null
+            popupTranscriptionText = null; popupIntentText = null
+        }
+    }
+
     // ---- listener plumbing ----
 
-    private fun emitPartial(p: String) = mainHandler.post { pipelineListener?.onPartialResult(p) }
-    private fun emitResult(raw: String, norm: String) =
-        mainHandler.post { pipelineListener?.onTranscriptionResult(raw, norm) }
-    private fun emitStatus(s: String) = mainHandler.post { pipelineListener?.onStatusChanged(s) }
+    private fun emitPartial(p: String) = mainHandler.post { 
+        pipelineListener?.onPartialResult(p) 
+        popupTranscriptionText?.text = if (p.isEmpty()) "..." else "$p..."
+    }
+    private fun emitResult(raw: String, norm: String) = mainHandler.post { 
+        pipelineListener?.onTranscriptionResult(raw, norm) 
+        popupTranscriptionText?.text = raw.ifBlank { "..." }
+    }
+    private fun emitStatus(s: String) = mainHandler.post { 
+        pipelineListener?.onStatusChanged(s)
+        when (s) {
+            STATUS_PREPARING -> popupStatusText?.text = "Preparing..."
+            STATUS_LISTENING -> {
+                showAssistantPopup()
+                popupStatusText?.text = "Listening..."
+                popupTranscriptionText?.text = "..."
+                popupIntentText?.visibility = View.GONE
+            }
+            STATUS_IDLE, "STOPPED" -> popupStatusText?.text = "Transcribing..."
+            STATUS_MODEL_ERROR -> {
+                popupStatusText?.text = "Error"
+                popupStatusText?.setTextColor(android.graphics.Color.RED)
+                mainHandler.postDelayed({ hideAssistantPopup() }, 3000)
+            }
+        }
+    }
     private fun emitCommand(i: String, ok: Boolean, m: String) {
         Log.i(TAG, "command $i success=$ok :: $m")
-        mainHandler.post { pipelineListener?.onCommandExecuted(i, ok, m) }
+        mainHandler.post { 
+            pipelineListener?.onCommandExecuted(i, ok, m) 
+            popupIntentText?.visibility = View.VISIBLE
+            popupIntentText?.text = if (ok) "$i — $m" else "$i — FAILED: $m"
+            popupIntentText?.setTextColor(if (ok) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#E57373"))
+            
+            // Auto-hide popup after 3 seconds of showing the result
+            mainHandler.postDelayed({ hideAssistantPopup() }, 3000)
+        }
         runCatching { startForegroundCompat(buildNotification(m)) }
     }
 

@@ -20,9 +20,17 @@ the entire speech pipeline. Three changes fixed this:
    that was rejecting all listening requests
 
 ### Device Testing Fixes (Hardware/OS Issues)
-- **Whisper Hallucination (`[Polong]`):** Fixed Android 11+ privacy restrictions causing silent mic captures. Added `FOREGROUND_SERVICE_MICROPHONE` permission and set `foregroundServiceType="microphone"` in `AndroidManifest.xml` and `OverlayService.kt`. Without this, the OS silently fills `AudioRecord` buffers with zeroes when capturing in the background, causing Whisper to hallucinate tokens like `[Polong]`. Also removed aggressive VAD from `AudioPreprocessor` that was slicing audio too tightly.
+- **Whisper Hallucination (`[Polong]`):** Fixed two severe mathematical bugs in the audio preprocessing pipeline.
+  1. The Slaney mel filter bank calculation inverted its subtraction `(start - frequency)` instead of `(frequency - start)`, causing it to output negative values which were clamped to 0.0. Every filter evaluated to 0.0, passing complete silence to Whisper.
+  2. The Cooley-Tukey FFT recombination loop calculated its phase angle using `subLength * radixFrequency` instead of `branch * subLength`, scrambling the complex frequencies of the input audio.
+  Also fixed Android 11+ privacy restrictions causing silent mic captures by explicitly declaring `FOREGROUND_SERVICE_MICROPHONE` and removed aggressive VAD slicing from `AudioPreprocessor`.
 - **Hardware Activation:** Added `flagRequestAccessibilityButton` to config and registered `AccessibilityButtonController` to allow the system's navigation bar accessibility button to trigger the app (bypassing OEM volume key intercepts).
-- **Setup Flow:** Automated the setup guide in `MainActivity` to chain permission prompts continuously rather than requiring manual back-and-forth.
+- **Setup Flow:** Automated the setup guide in `MainActivity` to chain permission prompts continuously and launch automatically on first run via `onResume()`.
+
+### Assistant UI & VAD Refinements (2026-08-12)
+- **Assistant Popup Overlay:** Added a Google Assistant-style bottom popup (`popup_assistant.xml`) that displays real-time state ("Listening...", "Transcribing..."), the transcribed Tagalog speech, and the translated/matched Intent action.
+- **Dynamic VAD Silence Cutoff:** Updated `AudioPreprocessor` to stop recording ~1.5s after the user stops speaking, rather than waiting a fixed 8 seconds. This provides a much snappier experience.
+- **Lexicon Expansion:** Added `pakibuksan` to map to `open` in `translation-lexicon.json` to fix missed intent classifications.
 
 ### UI Label Fixes
 - `activity_main.xml`: "Start Whisper" → "Start Listening"
