@@ -493,7 +493,42 @@ explicit reroute in `CommandExecutor` rather than by tie-breaking in the frozen
 matcher. Worth reporting as a reproducibility hazard in rule-based classifiers
 whose vocabulary is loaded from an unordered format.
 
-### 6. Instrumentation as data collection
+### 6. Silent permission failures and the false-success problem
+
+Three separate defects in this project shared one shape: **an API that fails
+without raising anything, wrapped in code that reported success anyway.** They
+are worth reporting together because the pattern, not any individual bug, is the
+finding.
+
+- **`AlarmClock` with an undeclared permission** threw `SecurityException`, which
+  a broad `catch (Throwable)` relabelled as "No alarm app available." The error
+  message named the wrong subsystem entirely and sent debugging in the wrong
+  direction for two sessions.
+- **The permission name itself was wrong.** `android.permission.SET_ALARM` does
+  not exist; the platform defines `com.android.alarm.permission.SET_ALARM`.
+  Declaring a permission Android does not recognise fails silently — the
+  manifest parses, nothing is granted, and the symptom is unchanged. The fix was
+  only confirmed by querying `dumpsys` for `granted=true` rather than by
+  observing that the permission appeared in the requested list.
+- **`TelecomManager.acceptRingingCall()` returns `void`** and, on some OEM
+  builds, does nothing rather than throwing when `ANSWER_PHONE_CALLS` is absent.
+  The implementation returned "Call answered" unconditionally. This is the worst
+  case of the three: a false success suppresses the fallback path that would
+  have worked, and it writes an incorrect outcome into the transcript log, which
+  is the study's own data collection instrument.
+
+**Methodological consequence.** Success must be established by a positive
+observation — a permission query, an observed state change, a returned value —
+never by the absence of an exception. Any system-level command executor that
+reports outcomes into a research log needs this rule stated explicitly, because
+the failure mode is silent data corruption rather than a visible crash.
+
+A related structural point: a ringing call is a heads-up notification in its own
+window, so `rootInActiveWindow` returns whatever the user was previously viewing
+— frequently this application's own overlay. Node search for anything that may
+not be in the focused window must enumerate all windows.
+
+### 7. Instrumentation as data collection
 A **Transcript History Log** was built into `OverlayService`, retaining the last
 50 utterances with a timestamp and all four pipeline stages: the raw model
 output (*Narinig*), the normalized translation (*Salin*), the matched intent,
@@ -506,6 +541,28 @@ lexicon development: each logged failure is a labelled (mis-transcription →
 intended intent) pair, and the lexicon grew from 48 to 340 entries through four
 rounds of this loop. The Methods section should describe it as such, since it is
 how the system's Filipino-language coverage was actually derived.
+
+### 8. Wake-word activation without a hotword engine
+
+An always-on call sign ("Hey HandsFree") was added as an **opt-in, default-off**
+activation mode. It is implemented without a dedicated keyword-spotting engine
+and without any new dependency: the ordinary capture → transcribe cycle runs in a
+loop, and every transcript that does not open with the call sign is discarded.
+The decision is made by the same Levenshtein function used for intent
+classification, so the feature introduces no new class of non-determinism and the
+offline constraint is unaffected.
+
+Matching joins up to three consecutive tokens and compares them with whitespace
+removed, because the ASR's word segmentation is unreliable — "hands free",
+"handsfree" and "hey hands free" must reduce to the same string.
+
+**The cost is stated rather than hidden**, and is the reason the mode defaults to
+off: the microphone cycles continuously and the full ASR model executes on every
+utterance-shaped sound in the environment. Power draw and thermal load therefore
+scale with ambient speech rather than with user intent. This is precisely the
+cost that a purpose-built keyword-spotting stage exists to avoid — a small
+always-on classifier gating a large model — and naming that trade-off explicitly
+is more defensible than presenting the feature as free.
 
 ---
 
@@ -522,6 +579,22 @@ in this project.
 | Commands resolve to the correct intent | 52-phrase offline matrix replaying `TranslationLayer` + `LevenshteinMatcher`, 0 failures | Moderate — verifies the JSONs, not the audio path |
 | Commands execute correctly on device | Ad-hoc voice testing, logged in Transcript History | Weak — no fixed protocol, one device, one speaker |
 | Command success rate | **Not measured.** No denominator, no trial count | **Absent** |
+
+**Per-feature status as of 2026-08-12, night.** Recorded at this granularity
+because "code complete" and "observed working" were repeatedly conflated during
+development, at direct cost to the schedule.
+
+| Feature | Executed on device? |
+|---|---|
+| Whisper transcription (Tagalog) | Yes |
+| APP_LAUNCH | Yes — YouTube, Facebook |
+| NAVIGATION — back, home, scroll | Yes |
+| NAVIGATION — tap-by-name | Yes — "pindutin ang kalendar" tapped Calendar |
+| SMART_SEARCH | Yes |
+| CALL_ACCEPT | **No.** Failed its only real test; repaired; repair not yet re-tested |
+| SCHEDULING | **No.** Never observed to open the Clock application |
+| Wake-word activation | **No.** Verified offline against 24 phrases only |
+| MESSAGING | Not implemented by design |
 
 The gap between rows 4 and 6 is the study's main evidentiary weakness. A fixed
 list of N commands spoken M times each, on the test device, tallied
