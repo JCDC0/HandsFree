@@ -20,6 +20,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.service.HandsFreeAccessibilityService
 import com.example.handsfree.service.OverlayService
@@ -207,6 +209,16 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // targetSdk 35 forces edge-to-edge, so with the action bar removed the
+        // content draws *behind* the status bar and the header text is clipped
+        // by it. Consume the system bar insets as padding rather than painting
+        // a coloured block over them.
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root_scroll)) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(view.paddingLeft, bars.top, view.paddingRight, bars.bottom)
+            insets
+        }
 
         installCrashHandler()
 
