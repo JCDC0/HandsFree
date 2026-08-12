@@ -395,6 +395,19 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-08-12 (night, 3) — SMART_SEARCH executes the search
+- `ACTION_WEB_SEARCH` only *prefills* the query on most handlers: the browser
+  opened with the words sitting in the search box waiting for a keypress, which
+  is exactly what a hands-free app cannot supply. `search()` now loads the
+  results URL with `ACTION_VIEW`, which executes it. `ACTION_WEB_SEARCH` is
+  retained as the fallback.
+- Trade-off: the engine is fixed rather than following the user's default.
+- This does **not** weaken the §1 offline claim. The app makes no network call;
+  it hands a URL to the browser, exactly as it handed a query before. A web
+  search is a network action by definition and always was — transcription,
+  translation and matching stay on-device. Worth saying plainly if a panelist
+  asks, since the URL is now visible in the source.
+
 ### 2026-08-12 (night, 2) — CALL_ACCEPT repair after its first real test
 First time a real ringing call reached the app. It failed three different ways
 in four utterances, and one of the failures reported SUCCESS.

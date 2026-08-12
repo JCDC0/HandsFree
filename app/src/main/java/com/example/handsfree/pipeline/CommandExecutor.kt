@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Rect
+import android.net.Uri
 import android.provider.AlarmClock
 import android.telecom.TelecomManager
 import android.util.Log
@@ -82,7 +83,7 @@ class CommandExecutor(
             "APP_LAUNCH" -> launchApp(argumentAfter(utterance, matchedPhrase))
             "CALL_ACCEPT" -> handleCall(utterance)
             "NAVIGATION" -> navigate(utterance, matchedPhrase, a11y!!)
-            "SMART_SEARCH" -> search(argumentAfter(utterance, matchedPhrase), a11y!!)
+            "SMART_SEARCH" -> search(argumentAfter(utterance, matchedPhrase))
             "MESSAGING" -> Result(false, "Messaging not in prototype scope")
             "SCHEDULING" -> setAlarm(utterance)
             else -> Result(false, "Unknown intent: $intentCategory")
@@ -325,14 +326,44 @@ class CommandExecutor(
     private fun hasWord(text: String, word: String): Boolean =
         Regex("\\b${Regex.escape(word)}s?\\b").containsMatchIn(text)
 
-    private fun search(query: String, a11y: HandsFreeAccessibilityService): Result {
+    /**
+     * Run a web search for [query] and land on the results.
+     *
+     * [Intent.ACTION_WEB_SEARCH] only *prefills* the query on most handlers —
+     * the browser opens with the words sitting in the search box waiting for a
+     * keypress, which is precisely the thing a hands-free app cannot do. Loading
+     * the results URL directly executes the search instead.
+     *
+     * The trade-off is that the engine is fixed rather than following the user's
+     * default. `ACTION_WEB_SEARCH` is kept as the fallback, so a device with no
+     * browser registered for http still behaves as it did before.
+     *
+     * This does not weaken the offline claim in §1: the app makes no network
+     * call, it hands a URL to the browser. Transcription, translation and intent
+     * matching remain entirely on-device — a web search is a network action by
+     * definition and always was.
+     */
+    private fun search(query: String): Result {
         if (query.isBlank()) return Result(false, "No search query heard")
-        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+
+        val results = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("$SEARCH_URL${Uri.encode(query)}")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        try {
+            context.startActivity(results)
+            return Result(true, "Searching for \"$query\"")
+        } catch (t: Throwable) {
+            Log.w(TAG, "no browser for a results URL, falling back to ACTION_WEB_SEARCH", t)
+        }
+
+        val webSearch = Intent(Intent.ACTION_WEB_SEARCH).apply {
             putExtra(android.app.SearchManager.QUERY, query)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         return try {
-            context.startActivity(intent)
+            context.startActivity(webSearch)
             Result(true, "Searching for \"$query\"")
         } catch (t: Throwable) {
             Result(false, "No search app available")
@@ -458,6 +489,9 @@ class CommandExecutor(
 
         /** Guard against pathological trees, matching `DfsNodeLocator`. */
         private const val MAX_TREE_DEPTH = 60
+
+        /** Results-page prefix. The query is appended URL-encoded. */
+        private const val SEARCH_URL = "https://www.google.com/search?q="
 
         /** Intents that can still do something useful with the service off. */
         private val NO_A11Y_REQUIRED = setOf("APP_LAUNCH", "SCHEDULING", "CALL_ACCEPT")
