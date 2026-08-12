@@ -233,8 +233,14 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
                     if (fields.size < 2) return@forEach
                     val id = fields[1].toIntOrNull() ?: return@forEach
                     if (id > TOKENS_MAX_TEXT_ID) return@forEach
-                    val bytes = Base64.decode(fields[0], Base64.DEFAULT)
-                    tokens[id] = bytes.toString(Charsets.UTF_8)
+                    val decoded = try {
+                        Base64.decode(fields[0], Base64.DEFAULT)
+                    } catch (_: IllegalArgumentException) {
+                        // Token 50256 is a bare "=" which is invalid base64.
+                        // Safe to skip — it is never emitted during decoding.
+                        return@forEach
+                    }
+                    tokens[id] = decoded.toString(Charsets.UTF_8)
                 }
             }
         }

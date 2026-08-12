@@ -1,6 +1,7 @@
 package com.example.handsfree.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityButtonController
 import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
@@ -34,8 +35,11 @@ class HandsFreeAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "HandsFreeA11y"
 
-        /** Hold duration before the activator fires. */
+        /** Hold duration before the single-key activator fires. */
         const val ACTIVATION_HOLD_MS = 1200L
+
+        /** Both volume keys held together — shorter since it's deliberate. */
+        const val BOTH_KEYS_HOLD_MS = 600L
 
         /** Tap contact time. Below ~50 ms some launchers ignore the gesture. */
         private const val TAP_DURATION_MS = 60L
@@ -50,6 +54,7 @@ class HandsFreeAccessibilityService : AccessibilityService() {
     }
 
     private var volumeDownPressedAt = 0L
+    private var volumeUpPressedAt = 0L
     private var activationFired = false
 
     // --- Lifecycle ---
@@ -58,6 +63,17 @@ class HandsFreeAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         Log.i(TAG, "connected — gesture dispatch and node access available")
+        
+        runCatching {
+            accessibilityButtonController.registerAccessibilityButtonCallback(
+                object : AccessibilityButtonController.AccessibilityButtonCallback() {
+                    override fun onClicked(controller: AccessibilityButtonController) {
+                        Log.i(TAG, "activator: accessibility button clicked -> waking listener")
+                        sendActivation()
+                    }
+                }
+            )
+        }.onFailure { Log.e(TAG, "failed to register accessibility button callback", it) }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -77,21 +93,36 @@ class HandsFreeAccessibilityService : AccessibilityService() {
     // --- Hardware activator ---
 
     /**
-     * Volume-down held for [ACTIVATION_HOLD_MS] starts a listening session.
+     * Activation by volume keys. Two supported gestures:
+     *   1. Hold VOLUME_DOWN alone for [ACTIVATION_HOLD_MS] (~1.2 s)
+     *   2. Press both VOLUME_UP + VOLUME_DOWN simultaneously for [BOTH_KEYS_HOLD_MS] (~0.6 s)
      *
-     * Returning true consumes the event, so a *short* press must be passed
-     * through or the user loses volume control entirely. The long-press is
-     * consumed; the short press is not.
+     * The second path exists because some OEM skins (notably Tecno HiOS)
+     * intercept single-key holds before accessibility services see them.
+     *
+     * Short presses always pass through so the user keeps volume control.
      */
     override fun onKeyEvent(event: KeyEvent?): Boolean {
-        if (event == null || event.keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) return false
+        if (event == null) return false
 
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> return handleVolumeDown(event)
+            KeyEvent.KEYCODE_VOLUME_UP -> return handleVolumeUp(event)
+        }
+        return false
+    }
+
+    private fun handleVolumeDown(event: KeyEvent): Boolean {
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {
                 if (volumeDownPressedAt == 0L) {
                     volumeDownPressedAt = SystemClock.elapsedRealtime()
                     activationFired = false
-                } else if (!activationFired &&
+                }
+                // Check both-keys-pressed activation
+                if (!activationFired && checkBothKeysActivation()) return true
+                // Check single-key long-press activation
+                if (!activationFired &&
                     SystemClock.elapsedRealtime() - volumeDownPressedAt >= ACTIVATION_HOLD_MS
                 ) {
                     activationFired = true
@@ -107,9 +138,45 @@ class HandsFreeAccessibilityService : AccessibilityService() {
                 volumeDownPressedAt = 0L
                 val consumed = activationFired
                 activationFired = false
-                // Long-press was ours; short press belongs to the volume slider.
                 return consumed || held >= ACTIVATION_HOLD_MS
             }
+        }
+        return false
+    }
+
+    private fun handleVolumeUp(event: KeyEvent): Boolean {
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (volumeUpPressedAt == 0L) {
+                    volumeUpPressedAt = SystemClock.elapsedRealtime()
+                }
+                // Check both-keys-pressed activation
+                if (!activationFired && checkBothKeysActivation()) return true
+                return activationFired
+            }
+
+            KeyEvent.ACTION_UP -> {
+                volumeUpPressedAt = 0L
+                val consumed = activationFired
+                // Don't clear activationFired here — volume-down UP will do it
+                return consumed
+            }
+        }
+        return false
+    }
+
+    /**
+     * Both volume keys held together for [BOTH_KEYS_HOLD_MS] triggers
+     * activation. Returns true if activation fired.
+     */
+    private fun checkBothKeysActivation(): Boolean {
+        if (volumeDownPressedAt == 0L || volumeUpPressedAt == 0L) return false
+        val earliest = minOf(volumeDownPressedAt, volumeUpPressedAt)
+        if (SystemClock.elapsedRealtime() - earliest >= BOTH_KEYS_HOLD_MS) {
+            activationFired = true
+            Log.i(TAG, "activator: both volume keys held -> waking listener")
+            sendActivation()
+            return true
         }
         return false
     }

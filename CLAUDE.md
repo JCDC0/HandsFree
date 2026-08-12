@@ -337,6 +337,11 @@ HandsFree_Team_Plan_Simple.pdf.
 
 ## CHANGELOG
 
+### 2026-08-12 (late afternoon) — Device Testing Fixes
+- Removed chunk-dropping Voice Activity Detection (VAD) from `AudioPreprocessor`. Feeding Whisper continuous, naturally paced audio rather than tightly packed non-silent chunks resolves the `[Polong]` hallucination issue.
+- Re-wired `HandsFreeAccessibilityService` to directly support the system's Accessibility Button, bypassing OEM OS layers that were intercepting volume key combinations.
+- Implemented automated permission chaining in `MainActivity`'s setup flow.
+
 ### 2026-08-12 (afternoon) — Whisper enabled, pipeline unblocked
 - Set `WhisperOnnxEngine.INFERENCE_IMPLEMENTED = true`.
 - Removed `INFERENCE_IMPLEMENTED` gates from `OverlayService.onReady` and

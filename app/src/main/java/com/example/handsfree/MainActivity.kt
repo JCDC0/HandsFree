@@ -58,6 +58,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
      *  start/stop toggle label and guards against double-starts. */
     private var pipelineActive = false
 
+    private var isSettingUp = false
+
     /** Clears transient error messages after a short delay. */
     private val errorClearHandler = Handler(Looper.getMainLooper())
     private val errorClearRunnable = Runnable {
@@ -153,9 +155,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                 if (missing.isEmpty()) {
                     startOverlayService()
                 } else {
-                    statusText.setTextColor(Color.RED)
-                    statusText.text = "Enable first: ${missing.joinToString() }"
-                    Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
+                    showSetupGuide(missing)
                 }
             } else {
                 requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
@@ -163,8 +163,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         }
 
         permButton.setOnClickListener {
-            // Open Accessibility Settings so user can enable the HandsFree service.
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            showSetupGuide(missingSetup())
         }
 
         showLogButton.setOnClickListener {
@@ -212,6 +211,16 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         super.onResume()
         OverlayService.pipelineListener = this
         updatePermissionStatus()
+        
+        if (isSettingUp) {
+            val missing = missingSetup()
+            if (missing.isNotEmpty()) {
+                showSetupGuide(missing)
+            } else {
+                isSettingUp = false
+                Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onPause() {
@@ -368,5 +377,47 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             statusText.setTextColor(Color.RED)
             statusText.text = message
         }
+    }
+
+    private fun showSetupGuide(missing: List<String>) {
+        if (missing.isEmpty()) {
+            isSettingUp = false
+            Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        isSettingUp = true
+
+        val message = StringBuilder("Please enable the following:\n\n")
+        if ("OVERLAY" in missing) {
+            message.append("• Display over other apps (needed for the floating microphone bubble)\n")
+        }
+        if ("ACCESSIBILITY" in missing) {
+            message.append("• Accessibility Service (needed to click on things for you and read the screen)\n")
+        }
+        if ("RECORD_AUDIO" in missing) {
+            message.append("• Record Audio (needed to hear your commands)\n")
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Setup Required")
+            .setMessage(message.toString().trim())
+            .setPositiveButton("Next Step") { _, _ ->
+                when {
+                    "OVERLAY" in missing -> {
+                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                        intent.data = android.net.Uri.parse("package:$packageName")
+                        startActivity(intent)
+                    }
+                    "ACCESSIBILITY" in missing -> {
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }
+                    "RECORD_AUDIO" in missing -> {
+                        requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ -> isSettingUp = false }
+            .show()
     }
 }

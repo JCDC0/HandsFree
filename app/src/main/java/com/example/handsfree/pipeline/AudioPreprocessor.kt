@@ -108,15 +108,13 @@ class AudioPreprocessor(private val context: Context? = null) {
                         continue
                     }
                     val slice = if (read == buffer.size) buffer.copyOf() else buffer.copyOfRange(0, read)
-                    if (hasSpeech(slice)) {
-                        try {
-                            callback(slice)
-                        } catch (t: Throwable) {
-                            Log.e(TAG, "audio callback failed", t)
-                            onError?.invoke(t)
-                            isCapturing = false
-                            break
-                        }
+                    try {
+                        callback(slice)
+                    } catch (t: Throwable) {
+                        Log.e(TAG, "audio callback failed", t)
+                        onError?.invoke(t)
+                        isCapturing = false
+                        break
                     }
                 }
                 Log.i(TAG, "Capture loop exiting")

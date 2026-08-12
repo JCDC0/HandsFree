@@ -19,6 +19,11 @@ the entire speech pipeline. Three changes fixed this:
 3. **`OverlayService.kt` startListening():** Removed `INFERENCE_IMPLEMENTED` check
    that was rejecting all listening requests
 
+### Device Testing Fixes (Hardware/OS Issues)
+- **Whisper Hallucination (`[Polong]`):** Removed aggressive VAD from `AudioPreprocessor` that was slicing audio too tightly, causing the Whisper ONNX model to hallucinate.
+- **Hardware Activation:** Added `flagRequestAccessibilityButton` to config and registered `AccessibilityButtonController` to allow the system's navigation bar accessibility button to trigger the app (bypassing OEM volume key intercepts).
+- **Setup Flow:** Automated the setup guide in `MainActivity` to chain permission prompts continuously rather than requiring manual back-and-forth.
+
 ### UI Label Fixes
 - `activity_main.xml`: "Start Whisper" → "Start Listening"
 - `MainActivity.kt`: "Ready — tap Start Whisper" → activator_hint string
