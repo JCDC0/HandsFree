@@ -81,7 +81,7 @@ stateful and is the likeliest thing to fail in front of an adviser.
 ```
 AudioPreprocessor      mic capture, 16 kHz mono 16-bit PCM, VAD
       |
-SpeechEngine           interface — VoskEngineAdapter now, WhisperOnnxEngine next
+SpeechEngine           interface — WhisperOnnxEngine live; VOSK kept as fallback
       |
 TranslationLayer       Tagalog/Taglish -> English via translation-lexicon.json
       |
@@ -97,9 +97,9 @@ HandsFreeAccessibilityService    gestures, global actions, text input
 | File | Role |
 |---|---|
 | `pipeline/SpeechEngine.kt` | ASR interface. Keeps the backend swappable. |
-| `pipeline/WhisperOnnxEngine.kt` | **Wired, not loaded.** See §5. |
-| `pipeline/VoskEngineAdapter.kt` | Wraps legacy VOSK to the interface. Delete when Whisper is live. |
-| `pipeline/VoskSpeechEngine.kt` | Legacy. **Do not modify** — currently the only working ASR path. |
+| `pipeline/WhisperOnnxEngine.kt` | **Live — this is the ASR path.** See §5. |
+| `pipeline/VoskEngineAdapter.kt` | Wraps legacy VOSK to the interface. Delete post-demo (§5). |
+| `pipeline/VoskSpeechEngine.kt` | Legacy, unused at runtime. Kept only as the demo-morning fallback. |
 | `pipeline/CommandExecutor.kt` | Intent routing and argument extraction. |
 | `pipeline/DfsNodeLocator.kt` | Tiered-score DFS over the node tree. |
 | `pipeline/LevenshteinMatcher.kt` | Intent classification. |
@@ -344,10 +344,16 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
 - SMART_SEARCH — "hanapin ang sapatos"
 - Transcript History log captures all four pipeline stages per utterance
 
+**Also confirmed on the device (20:44–20:46 round):**
+- NAVIGATION tap-by-name — "pindutin ang kalendar" tapped Calendar on the home
+  screen. Tap-by-name has now executed for real at least once.
+
 **Code-complete but never executed on the device:**
 - **CALL_ACCEPT.** Needs a second phone to place a real ringing call. This is
   one third of the demo scope and has never once been run. Highest-risk item.
-- SCHEDULING alarm/timer — repaired after the log triage, not re-tested aloud
+- SCHEDULING alarm/timer — the permission was only actually granted as of the
+  night build; every alarm attempt before it threw `SecurityException`. Never
+  once seen to open the Clock app. Treat as unverified.
 - Volume-key activator — accessibility button is used instead; volume path is
   unverified on this OEM skin
 - Tap-by-name against a real home screen with folders and emoji labels
@@ -376,6 +382,37 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-12 (night) — 20:44–20:46 log triage
+- **The SET_ALARM permission name was wrong.** `android.permission.SET_ALARM`
+  does not exist; the AlarmClock permission is
+  `com.android.alarm.permission.SET_ALARM`. The earlier "fix" declared a
+  permission the platform does not define, so nothing was granted and the
+  `SecurityException` survived — it only improved the error message. Verified
+  this time with `granted=true` from `dumpsys`, not merely present in the
+  requested list.
+- **Number words now map to digits** (`five` → `5`, `seven` → `7`, …). The
+  duration and clock parsers in `setAlarm()` are regex over digits, so "timer
+  for five minutes" parsed nothing and silently fell through to the alarm path.
+  Also unlocks "alarm for seven p.m.".
+- **An explicit tap verb now beats a colliding object.** "pindutin ang search
+  google" normalises to "press search google", which carries NAVIGATION
+  `press` and SMART_SEARCH `google` at distance 0 — the user is naming
+  something to tap. No lexicon entry can separate these, since any object
+  containing "search" or "google" drags the search intent along with it, so
+  `execute()` reroutes to NAVIGATION when the utterance opens with a tap verb.
+- **Tap-by-name falls back to individual words** when the whole phrase matches
+  no node. `DfsNodeLocator` needs the needle to be a substring of the label, so
+  "search google" misses a field reading "Search or type URL" that "search"
+  hits. Words under four characters are skipped, and the fallback only runs
+  after the full phrase has already failed — it cannot regress a passing case.
+- Lexicon: `press` family for the b/p and dropped-initial garble (`bindotin`,
+  `indutan`, `pindotin`, `pindutan`, `bindut`…), `kontax`/`kontaks` → contacts,
+  `surge` → search, and the number words above.
+- Verified before building: tonight's seven utterances plus the full 52-phrase
+  matrix, 0 failures and no new cross-intent ties.
+- Doc correction: §3's file map still described Whisper as "wired, not loaded"
+  and VOSK as the only working ASR path. Both contradicted §5 and the code.
 
 ### 2026-08-12 (evening, 2) — Lexicon round 3, short-phrase purge, docs
 - **Removed `go`, `up`, `down` and `tap` as trigger phrases.** The matcher

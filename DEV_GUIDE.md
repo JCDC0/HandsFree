@@ -262,6 +262,22 @@ acceptance criterion is not "the new cases pass" — it is **zero changes to any
 currently-passing case**. Anything else is a regression, however good the new
 behaviour looks.
 
+### Evidence log — cases that wanted this fix and got a lexicon entry instead
+
+Append to this as it happens. It is the argument for building §6a after Aug 14,
+and it doubles as the manuscript's "future work" justification.
+
+| Date | Heard | Should have been | What it demonstrates |
+|---|---|---|---|
+| 08-12 20:45 | `bindotin` | `pindutin` → press | Step 4 fuzzy lookup, distance 1 from an existing key. Misclassified as SMART_SEARCH `find` and **reported SUCCESS while doing the wrong thing** |
+| 08-12 20:44 | `indutan` | `pindutin` → press | Dropped initial consonant + `-an` suffix. Step 3 affix strip, then step 4 |
+| 08-12 20:46 | `kontax` | contacts | Phonetic spelling of an English loan. Step 4 catches it once any one variant exists; hand-enumeration cannot |
+
+Three of the seven utterances in one test round were affix or phonetic variants
+of keys already in the lexicon. That is the convergence problem in §6a stated as
+data rather than as an argument: `pindutin` now has **nine** hand-typed variants
+and the next speaker will produce a tenth.
+
 ---
 
 ## 7. Handing a log to your own AI

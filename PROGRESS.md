@@ -25,10 +25,10 @@ have been conflated repeatedly in this project and it has cost real time.
 | APP_LAUNCH — YouTube, Facebook | ✅ | ✅ |
 | NAVIGATION — back, home | ✅ | ✅ |
 | NAVIGATION — scroll up/down | ✅ | ✅ |
-| NAVIGATION — tap-by-name ("pindutin ang Games") | ✅ fixed | ❌ **not retested since the fix** |
+| NAVIGATION — tap-by-name ("pindutin ang kalendar") | ✅ | ✅ tapped Calendar on the home screen |
 | SMART_SEARCH — "hanapin ang sapatos" | ✅ | ✅ |
 | CALL_ACCEPT / DECLINE | ✅ | ❌ **never run — needs a second phone** |
-| SCHEDULING (alarm + timer) | ✅ repaired | ❌ not retested since the fix |
+| SCHEDULING (alarm + timer) | ✅ repaired twice | ❌ **never once opened the Clock** — the permission was misnamed until the night build |
 | MESSAGING | ⛔ classifies only | n/a — out of scope by design |
 
 **The three things that matter before the demo, in order:**
@@ -43,6 +43,23 @@ have been conflated repeatedly in this project and it has cost real time.
 
 Everything else is lexicon work, which is endless and can continue after the
 demo. Task list: `DEV_GUIDE.md` §6.
+
+---
+
+## Session — 20:44–20:46 log triage (night)
+
+- `SET_ALARM` was declared under a permission name the platform does not define
+  (`android.permission.SET_ALARM` instead of `com.android.alarm.permission.
+  SET_ALARM`), so scheduling had never been granted anything. Now `granted=true`
+  on the device.
+- Number words map to digits — the alarm/timer parsers are regex over digits, so
+  "timer for five minutes" parsed no duration at all.
+- An explicit tap verb ("pindutin …") now beats a colliding object; "press search
+  google" was being classified SMART_SEARCH by the word "google".
+- Tap-by-name retries individual words when the whole phrase matches no node.
+- Lexicon: the `press` family (`bindotin`, `indutan`, `pindotin`…), `kontax` →
+  contacts, `surge` → search.
+- Verified: tonight's seven utterances + the 52-phrase matrix, 0 failures.
 
 ---
 

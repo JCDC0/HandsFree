@@ -2,6 +2,7 @@ package com.example.handsfree.pipeline
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.provider.AlarmClock
 import android.telecom.TelecomManager
 import android.util.Log
@@ -53,6 +54,20 @@ class CommandExecutor(
             val destination = argumentAfter(utterance, matchedPhrase).trim()
             if (NAVIGATION_TARGETS.any { destination.startsWith(it) }) {
                 return a11y?.let { navigate(utterance, matchedPhrase, it) }
+                    ?: Result(false, "Accessibility Service is off — enable HandsFree in Settings")
+            }
+        }
+
+        // An explicit tap verb wins over whatever the object happens to collide
+        // with. "pindutin ang search google" normalises to "press search
+        // google", which carries NAVIGATION "press" and SMART_SEARCH "google"
+        // at distance 0 — the user is naming a thing to tap, not asking for a
+        // web search. No lexicon entry can separate these: any object
+        // containing "search" or "google" pulls the search intent in with it.
+        if (intentCategory != "NAVIGATION") {
+            val verb = TAP_VERBS.firstOrNull { utterance.startsWith(it, ignoreCase = true) }
+            if (verb != null) {
+                return a11y?.let { navigate(utterance, verb, it) }
                     ?: Result(false, "Accessibility Service is off — enable HandsFree in Settings")
             }
         }
@@ -184,14 +199,51 @@ class CommandExecutor(
                 // utterance: "press games" must look for "games", because no node
                 // is ever labelled "press games".
                 val target = argumentAfter(utterance, matchedPhrase).ifBlank { utterance }
-                val bounds = nodeLocator.findNode(a11y.getActiveRoot(), target)
-                if (bounds != null) {
-                    a11y.tapRect(bounds); Result(true, "Tapped \"$target\"")
+                val match = bestNodeFor(a11y, target)
+                if (match != null) {
+                    a11y.tapRect(match.first); Result(true, "Tapped \"${match.second}\"")
                 } else {
                     Result(false, "Nothing on screen matches \"$target\"")
                 }
             }
         }
+    }
+
+    /**
+     * Best on-screen node for [target], falling back to its individual words.
+     *
+     * `DfsNodeLocator` needs the needle to be a substring of the label, so a
+     * two-word spoken target rarely matches a real control: "search google"
+     * finds nothing on a browser whose field reads "Search or type URL", while
+     * "search" finds it outright. Words are tried only after the whole phrase
+     * misses, so nothing that resolves today can change — this can only convert
+     * a current failure into a tap.
+     *
+     * Words shorter than four characters are skipped for the same reason
+     * trigger phrases are (DEV_GUIDE §4.3): they match too much.
+     *
+     * @return bounds and the text that matched, or null if nothing scored.
+     */
+    private fun bestNodeFor(
+        a11y: HandsFreeAccessibilityService,
+        target: String
+    ): Pair<Rect, String>? {
+        val root = a11y.getActiveRoot()
+        nodeLocator.findNode(root, target)?.let { return it to target }
+
+        val words = target.split(' ').filter { it.length >= 4 }
+        if (words.size < 2) return null
+
+        var best: Pair<Rect, String>? = null
+        var bestScore = 0
+        words.forEach { word ->
+            val match = nodeLocator.findBest(a11y.getActiveRoot(), word)
+            if (match != null && match.score > bestScore) {
+                bestScore = match.score
+                best = match.bounds to word
+            }
+        }
+        return best
     }
 
     /**
@@ -327,6 +379,12 @@ class CommandExecutor(
         private val NAVIGATION_TARGETS = listOf(
             "home", "back", "recents", "recent apps", "notifications", "notification"
         )
+
+        /**
+         * Explicit "tap this thing" verbs. Longest first — "press on" must be
+         * tested before "press" or the argument keeps a leading "on".
+         */
+        private val TAP_VERBS = listOf("press on", "tap on", "press", "click", "select")
 
         private val DECLINE_WORDS = listOf("decline", "reject", "tanggihan", "ayaw")
         private val ANSWER_LABELS = listOf("answer", "accept", "sagutin", "pick up")
