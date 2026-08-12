@@ -47,7 +47,10 @@ class TranslationLayer private constructor(private val lexicon: Map<String, Stri
             }
             // Single-token lookup
             val translation = lexicon[tokens[i]]
-            result.add(translation ?: tokens[i])
+            val finalToken = translation ?: tokens[i]
+            if (finalToken.isNotEmpty()) {
+                result.add(finalToken)
+            }
             i++
         }
 
