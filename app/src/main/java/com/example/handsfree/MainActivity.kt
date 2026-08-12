@@ -47,6 +47,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var permButton: Button
     private lateinit var showLogButton: Button
 
+    private lateinit var showHistoryButton: Button
+
     /**
      * Previous handler captured so we can delegate after logging our own crash
      * info. The default VM handler terminates the process — we keep that
@@ -130,6 +132,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startButton = findViewById(R.id.start_button)
         permButton = findViewById(R.id.perm_button)
         showLogButton = findViewById(R.id.show_log_button)
+        showHistoryButton = findViewById(R.id.show_history_button)
 
         // Load LevenshteinMatcher for intent display in the debug UI
         levenshteinMatcher = runCatching {
@@ -166,11 +169,43 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             showSetupGuide(missingSetup())
         }
 
+        showHistoryButton.setOnClickListener {
+            val history = if (transcriptHistory.isEmpty()) "No history recorded yet." else transcriptHistory.joinToString("\n\n---\n\n")
+            val scrollView = android.widget.ScrollView(this)
+            val textView = TextView(this).apply {
+                text = history
+                setPadding(48, 48, 48, 48)
+                setTextIsSelectable(true)
+            }
+            scrollView.addView(textView)
+
+            AlertDialog.Builder(this)
+                .setTitle("Transcript History (Last 50)")
+                .setView(scrollView)
+                .setNeutralButton("Copy to Clipboard") { _, _ ->
+                    val clipboard = getSystemService(ClipboardManager::class.java)
+                    clipboard?.setPrimaryClip(
+                        ClipData.newPlainText("HandsFree Transcript History", history)
+                    )
+                    Toast.makeText(this, "History copied to clipboard", Toast.LENGTH_SHORT).show()
+                }
+                .setPositiveButton("Close", null)
+                .show()
+        }
+
         showLogButton.setOnClickListener {
             val log = CrashLog.read(this)
+            val scrollView = android.widget.ScrollView(this)
+            val textView = TextView(this).apply {
+                text = log
+                setPadding(48, 48, 48, 48)
+                setTextIsSelectable(true)
+            }
+            scrollView.addView(textView)
+
             AlertDialog.Builder(this)
-                .setTitle("crash.log (last line = the step that killed us)")
-                .setMessage(log)
+                .setTitle("System Log")
+                .setView(scrollView)
                 .setNeutralButton("Copy to Clipboard") { _, _ ->
                     val clipboard = getSystemService(ClipboardManager::class.java)
                     clipboard?.setPrimaryClip(
@@ -315,9 +350,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                 
                 val logEntry = "Narinig: $rawTranscribed\nSalin: $normalized\nIntent: $intentStr"
                 transcriptHistory.add(0, logEntry)
-                if (transcriptHistory.size > 20) transcriptHistory.removeLast()
+                if (transcriptHistory.size > 50) transcriptHistory.removeLast()
                 
-                transcribedText.text = transcriptHistory.joinToString("\n\n---\n\n")
+                transcribedText.text = rawTranscribed
                 
                 translatedText.text = normalized
                 intentText.text = if (match != null) {
@@ -326,7 +361,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     "No match"
                 }
             } else {
-                if (transcriptHistory.isEmpty()) transcribedText.text = "—"
+                transcribedText.text = "—"
                 translatedText.text = "—"
                 intentText.text = "—"
             }
