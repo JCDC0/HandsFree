@@ -1,11 +1,22 @@
 # CLAUDE.md — HandsFree
 
 > [!IMPORTANT]
-> **REQUEST FOR ASSISTANCE (TO ALL FUTURE AGENTS):**
-> 
-> The current developer (the User) is actively testing the Voice-to-Intent pipeline. The biggest hurdle right now is the **Whisper ONNX phonetic transcription (Lexicon)**. Whisper often transcribes Tagalog/English commands phonetically or incorrectly (e.g., "skedyo at timer" instead of "schedule a timer", "adho-bore-sipi" instead of "adobo recipe", "boksan" instead of "buksan"). 
-> 
-> **YOUR TASK:** The User will provide you with raw garbled outputs from their voice tests. You MUST assist them by taking those garbled outputs, adding them to `c:\GitHub\HandsFree\app\src\main\assets\translation-lexicon.json` mapping to the correct English translations, and repairing the intent pipeline. The pipeline relies completely on `translation-lexicon.json` to normalize the audio model's output before it hits the Levenshtein matcher.
+> **REQUEST FOR ASSISTANCE (TO ALL FUTURE AGENTS AND GROUPMATES):**
+>
+> The team is actively testing the Voice-to-Intent pipeline on hardware. The
+> speech model runs; the bottleneck is now the **lexicon**. Whisper transcribes
+> Tagalog phonetically ("boksan" for "buksan", "treloh" for "trello",
+> "adho-bore-sipi" for "adobo recipe"), and `translation-lexicon.json` is what
+> absorbs that before the Levenshtein matcher sees it.
+>
+> **YOUR TASK:** take the raw voice-test logs the user gives you, work out what
+> each utterance meant, and add the garble to
+> `app/src/main/assets/translation-lexicon.json`.
+>
+> **Read `DEV_GUIDE.md` before you edit either JSON file.** Its §4 lists six
+> rules that each correspond to a bug already shipped — two intents matching one
+> utterance, and trigger phrases under four characters, are the two that keep
+> recurring. Prefer a lexicon entry over changing Kotlin, every time.
 
 Read this fully before changing anything. It is the app's memory between
 sessions. **Update §9 and the CHANGELOG before you finish.**
@@ -103,10 +114,17 @@ HandsFreeAccessibilityService    gestures, global actions, text input
 ### Assets
 
 - `intent-vocabulary.json` — six intents, each with trigger phrases
-- `translation-lexicon.json` — 47 Tagalog/Taglish → English entries
+- `translation-lexicon.json` — ~340 Tagalog/Taglish/garble → English entries
 
 Both are small and hand-maintained. **Adding a phrase to the vocabulary is
-usually a better fix than changing matcher code.** Try that first.
+usually a better fix than changing matcher code.** Try that first, and follow
+the rules in `DEV_GUIDE.md` §4 when you do.
+
+### Docs
+
+`CLAUDE.md` (this file, architecture + rules) · `DEV_GUIDE.md` (how to do the
+lexicon work, task list) · `PROGRESS.md` (current state) ·
+`RESEARCH_DOCUMENTATION.md` (manuscript-facing). Superseded docs are in `junk/`.
 
 ---
 
@@ -319,7 +337,14 @@ vocabulary:
    guarantee. Never let a normalised utterance contain triggers from two
    different intents (e.g. "go home" hits APP_LAUNCH `go` *and* NAVIGATION
    `home`). This is why the garbled `pomunta`/`humalik` map to `""` rather
-   than to `go`.
+   than to `go`, and why `CommandExecutor` reroutes APP_LAUNCH commands whose
+   argument is an OS destination.
+3. **Ordinary Tagalog false-matches.** `bakit`→`back`, `salamat`→`alarm`,
+   `sandali`→`send` are all distance 2. Common offenders are mapped to `""`.
+   The real fix is tie-breaking or a confidence margin in the matcher — a
+   post-demo task, since the matcher is frozen.
+
+Full working rules for editing the two JSON files: `DEV_GUIDE.md` §4.
 
 **Speech backend:** Karl's fine-tuned Whisper-tiny-tl ONNX export.
 `INFERENCE_IMPLEMENTED = true`. The full pipeline is:
@@ -359,6 +384,31 @@ HandsFree_Team_Plan_Simple.pdf.
 ---
 
 ## CHANGELOG
+
+### 2026-08-12 (evening, 2) — Lexicon round 3, short-phrase purge, docs
+- **Removed `go`, `up`, `down` and `tap` as trigger phrases.** The matcher
+  compares a phrase against a *prefix* of the input, so at threshold 2 a
+  two-letter phrase matches every utterance — `up` was acting as a silent
+  catch-all that scrolled on unrecognised commands. Tagalog direction words now
+  map to `scroll up` / `scroll down`, and `i-tap` maps to `tap on`. APP_LAUNCH
+  still matches "go youtube" via `go to` at prefix distance 1.
+- `CommandExecutor.execute()` reroutes an APP_LAUNCH whose argument is an OS
+  destination (home/back/recents/notifications) to NAVIGATION. "pumunta sa home
+  screen" normalises to "go home", which two intents match at distance 0, and
+  `org.json` does not guarantee which one wins.
+- `translation-lexicon.json` 120 → ~340 entries, added in families rather than
+  one-offs: `i-`/`paki-`/`mag-` verb prefixes, dropped particles
+  (`po`, `ba`, `lang`, `naman`, `pwede`, `mga`…), phonetic app names
+  (`yutyub`, `feysbuk`, `syopi`, `jikash`, `weys`…), Tagalog clock times as
+  bigrams (`alas siyete` → `7`, `ng gabi` → `p.m.`) and durations
+  (`limang minuto` → `5 minutes`).
+- Mapped `salamat`, `sandali`, `teka`, `bakit`, `magkano` to `""`. At threshold
+  2 they were matching `alarm`, `send` and `back` — ordinary speech was firing
+  commands.
+- 52-phrase intent matrix verified end to end before building: 0 failures.
+- Docs: added `DEV_GUIDE.md` (command card, six lexicon rules, task list, AI
+  handoff prompt). Rewrote `README.md` as a short entry point. Archived the
+  July/VOSK-era README and `manuscript-extract.md` to `junk/`.
 
 ### 2026-08-12 (evening) — Lexicon round 2, tap-by-name and alarm repairs
 Driven by the 18:28–18:32 device voice-test log. Every failure in that log is

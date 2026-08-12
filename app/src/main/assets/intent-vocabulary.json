@@ -4,7 +4,7 @@
   "_maintainers": "Add common phrasings you encounter during testing.",
   "intents": {
     "APP_LAUNCH": {
-      "phrases": ["open", "launch", "start", "go to", "go", "buksan", "bukas"],
+      "phrases": ["open", "launch", "start", "go to", "buksan", "bukas"],
       "action": "Launches an app by package name or common name"
     },
     "SMART_SEARCH": {
@@ -24,7 +24,7 @@
       "action": "Creates, reads, or checks reminders and alarms via Android system APIs"
     },
     "NAVIGATION": {
-      "phrases": ["back", "home", "scroll down", "scroll up", "swipe left", "swipe right", "tap", "tap on", "press", "press on", "click", "select", "next", "previous", "down", "up", "recents", "notifications"],
+      "phrases": ["back", "home", "scroll", "scroll down", "scroll up", "swipe left", "swipe right", "tap on", "press", "press on", "click", "select", "next", "previous", "recents", "notifications"],
       "action": "General UI navigation commands (scroll, swipe, tap grid coordinates)"
     }
   }

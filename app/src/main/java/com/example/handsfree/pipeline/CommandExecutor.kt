@@ -44,6 +44,19 @@ class CommandExecutor(
             return Result(false, "Accessibility Service is off — enable HandsFree in Settings")
         }
 
+        // "pumunta sa home screen" normalises to "go home", which contains an
+        // APP_LAUNCH trigger ("go") and a NAVIGATION trigger ("home") at equal
+        // distance. org.json does not guarantee key order, so the winner is
+        // arbitrary. Route by destination instead of trusting the tie, or the
+        // command works on one build and opens a random launcher on the next.
+        if (intentCategory == "APP_LAUNCH") {
+            val destination = argumentAfter(utterance, matchedPhrase).trim()
+            if (NAVIGATION_TARGETS.any { destination.startsWith(it) }) {
+                return a11y?.let { navigate(utterance, matchedPhrase, it) }
+                    ?: Result(false, "Accessibility Service is off — enable HandsFree in Settings")
+            }
+        }
+
         return when (intentCategory) {
             "APP_LAUNCH" -> launchApp(argumentAfter(utterance, matchedPhrase))
             "CALL_ACCEPT" -> handleCall(utterance)
@@ -305,6 +318,16 @@ class CommandExecutor(
 
     companion object {
         private const val TAG = "CommandExecutor"
+        /**
+         * Destinations that are OS navigation, never an installed app. An
+         * APP_LAUNCH whose argument starts with one of these is really a
+         * NAVIGATION command that lost a tie. "settings" is deliberately absent
+         * — it is a real launchable app.
+         */
+        private val NAVIGATION_TARGETS = listOf(
+            "home", "back", "recents", "recent apps", "notifications", "notification"
+        )
+
         private val DECLINE_WORDS = listOf("decline", "reject", "tanggihan", "ayaw")
         private val ANSWER_LABELS = listOf("answer", "accept", "sagutin", "pick up")
         private val DECLINE_LABELS = listOf("decline", "reject", "hang up", "end call")

@@ -1,19 +1,60 @@
 # HandsFree — Agent Handoff / Progress Report
 
 > [!IMPORTANT]
-> **REQUEST FOR ASSISTANCE (TO ALL FUTURE AGENTS):**
-> 
-> The current developer (the User) is actively testing the Voice-to-Intent pipeline. The biggest hurdle right now is the **Whisper ONNX phonetic transcription (Lexicon)**. Whisper often transcribes Tagalog/English commands phonetically or incorrectly (e.g., "skedyo at timer" instead of "schedule a timer", "adho-bore-sipi" instead of "adobo recipe", "boksan" instead of "buksan"). 
-> 
-> **YOUR TASK:** The User will provide you with raw garbled outputs from their voice tests. You MUST assist them by taking those garbled outputs, adding them to `c:\GitHub\HandsFree\app\src\main\assets\translation-lexicon.json` mapping to the correct English translations, and repairing the intent pipeline. The pipeline relies completely on `translation-lexicon.json` to normalize the audio model's output before it hits the Levenshtein matcher.
+> **Working on this? Read `DEV_GUIDE.md`.** It has the command card, the six
+> rules for editing the lexicon, and the task list. This file is the status
+> board only.
+>
+> The bottleneck is the **lexicon**, not the model. Bring voice-test logs, add
+> the garble to `app/src/main/assets/translation-lexicon.json`, rebuild.
 
 **Last updated:** 2026-08-12 evening PHT
-**Author:** Claude Code — voice-test log triage (18:28–18:32 batch)
+**Author:** Claude Code — voice-test log triage + lexicon round 3
 **Build status:** ✅ GREEN — `assembleDebug` + `installDebug` on device
 
 ---
 
-## Latest Session — 18:28–18:32 voice-test log triage
+## Where the demo stands
+
+| Feature | State |
+|---|---|
+| APP_LAUNCH | ✅ verified through the matcher, needs a device pass |
+| NAVIGATION — back / home / scroll / recents / notifications | ✅ |
+| NAVIGATION — tap-by-name ("pindutin ang Games") | ✅ fixed today, **device-test this first** |
+| CALL_ACCEPT | ✅ code complete, needs a second phone |
+| SMART_SEARCH | ✅ working, not in the demo script |
+| SCHEDULING (alarm + timer) | ✅ repaired today, not in the demo script |
+| MESSAGING | ⛔ classifies correctly, executes nothing — by design |
+
+**Next three things, in order:** (1) device-test tap-by-name on a real home
+screen, (2) confirm the activator on each phone, (3) keep feeding the lexicon
+from every test round. Task list with owners: `DEV_GUIDE.md` §6.
+
+**Known limitation worth writing into the manuscript:** at Levenshtein
+threshold 2, short trigger phrases false-accept ordinary Tagalog words
+(`bakit`≈`back`, `salamat`≈`alarm`, `sandali`≈`send`). Mitigated by purging
+sub-four-character triggers and mapping common offenders to `""`; the
+principled fix is a confidence margin or tie-break in the matcher.
+
+---
+
+## Session — lexicon round 3 (evening)
+
+- Purged trigger phrases shorter than four characters (`go`, `up`, `down`,
+  `tap`). At threshold 2 the matcher compares against a prefix, so `up` matched
+  *every* utterance and acted as a silent catch-all.
+- `CommandExecutor` now reroutes an APP_LAUNCH whose argument is an OS
+  destination to NAVIGATION, so "pumunta sa home screen" cannot depend on JSON
+  key order.
+- Lexicon 120 → ~340 entries, added as families (`i-`/`paki-`/`mag-` prefixes,
+  particles, phonetic app names, Tagalog clock times and durations).
+- 52-phrase matrix verified before building: 0 failures.
+- Docs consolidated: `DEV_GUIDE.md` added, `README.md` rewritten, stale docs
+  moved to `junk/`.
+
+---
+
+## Session — 18:28–18:32 voice-test log triage
 
 All eleven utterances from the log now resolve correctly. Verified by replaying
 them through a simulation of `TranslationLayer` + `LevenshteinMatcher` against
