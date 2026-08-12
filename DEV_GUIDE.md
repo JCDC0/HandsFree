@@ -399,6 +399,8 @@ Paste this with the repo open in Claude Code / Cursor / whatever you use:
 > Verify the phrases resolve correctly before building, then run
 > `./gradlew assembleDebug` and tell me what changed and why.
 >
+> **Task from Karl:** I have a copy list of input, output, and intent. Please help me fix the lexicon by testing these phrases and repairing the errors by updating the app's lexicon (`translation-lexicon.json`). Please figure out more of the input/output and expected intent mapping so I can focus on building the app!
+>
 > [paste log here]
 
 Then rebuild, reinstall, retest, and **commit the lexicon** — everyone else is

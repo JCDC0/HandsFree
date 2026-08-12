@@ -22,6 +22,7 @@ import androidx.core.app.NotificationCompat
 import com.example.handsfree.R
 import com.example.handsfree.pipeline.AudioPreprocessor
 import com.example.handsfree.pipeline.CommandExecutor
+import com.example.handsfree.pipeline.KeywordSpotter
 import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.pipeline.SpeechEngine
 import com.example.handsfree.pipeline.TranslationLayer
@@ -58,6 +59,10 @@ class OverlayService : Service() {
     private lateinit var commandExecutor: CommandExecutor
     private var matcher: LevenshteinMatcher? = null
 
+    private lateinit var keywordSpotter: KeywordSpotter
+    private var kwsBuffer = ShortArray(0)
+    @Volatile private var kwsListening = false
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -77,7 +82,7 @@ class OverlayService : Service() {
     private val wakeWordDetector = WakeWordDetector()
 
     private val rearmRunnable = Runnable {
-        if (wakeWordEnabled && !listening) startListening()
+        if (wakeWordEnabled && !listening && !kwsListening) startKwsListening()
     }
 
     private var windowManager: WindowManager? = null
@@ -116,8 +121,26 @@ class OverlayService : Service() {
         runCatching { startForegroundCompat(buildNotification("HandsFree starting…")) }
             .onFailure { CrashLog.exception(this, "STEP_1 startForeground", it); throw it }
 
+        runCatching {
+            val file = java.io.File(filesDir, "transcript.log")
+            if (file.exists()) {
+                val content = file.readText()
+                if (content.isNotBlank()) {
+                    val entries = content.split("|||")
+                    transcriptHistory.clear()
+                    transcriptHistory.addAll(entries)
+                }
+            }
+        }.onFailure { Log.e(TAG, "Failed to load transcript history", it) }
+
         audioPreprocessor = AudioPreprocessor(this)
         commandExecutor = CommandExecutor(this)
+        keywordSpotter = KeywordSpotter(this)
+
+        // Prepare KWS models off the main thread
+        scope.launch {
+            keywordSpotter.prepare(this@OverlayService)
+        }
 
         translationLayer = runCatching {
             TranslationLayer.fromAssets(
@@ -171,10 +194,14 @@ class OverlayService : Service() {
             emitStatus(STATUS_PREPARING)
             return
         }
+        if (kwsListening) {
+            stopKwsListening()
+            Log.i(TAG, "switched from KWS to Whisper")
+        }
         listening = true
         emitStatus(STATUS_LISTENING)
         updateBubble("●", 0xFFE53935.toInt())
-        startPipeline()
+        startCaptureIfNeeded()
         mainHandler.removeCallbacks(sleepRunnable)
         mainHandler.postDelayed(sleepRunnable, LISTEN_WINDOW_MS)
     }
@@ -184,12 +211,18 @@ class OverlayService : Service() {
         listening = false
         startWhenReady = false
         mainHandler.removeCallbacks(sleepRunnable)
-        audioPreprocessor.stopCapture()
-        pipelineRunning = false
         emitStatus(STATUS_IDLE)
         updateBubble("🎤", 0xFF1E88E5.toInt())
         Log.i(TAG, "stopped listening: $reason")
         flushWhisperUtterance()
+        checkStopCapture()
+    }
+
+    private fun checkStopCapture() {
+        if (!listening && !kwsListening) {
+            audioPreprocessor.stopCapture()
+            pipelineRunning = false
+        }
     }
 
     /** Whisper emits one result after the listening window, not per audio chunk. */
@@ -204,6 +237,37 @@ class OverlayService : Service() {
                 if (!raw.isNullOrBlank()) handleUtterance(raw) else scheduleRearm()
             }
         }
+    }
+
+    // ---- KWS (keyword spotter) cascade ----
+
+    /**
+     * Open the mic for background keyword detection. No UI popup is shown.
+     * When the keyword is detected, KWS capture is stopped and the full
+     * Whisper pipeline is started via [startListening].
+     */
+    private fun startKwsListening() {
+        if (kwsListening || listening) return
+        if (!keywordSpotter.isReady) {
+            Log.w(TAG, "KWS not ready — skipping")
+            return
+        }
+        kwsListening = true
+        keywordSpotter.reset()
+        emitStatus(STATUS_KWS_LISTENING)
+        updateBubble("👂", 0xFF78909C.toInt())
+        Log.i(TAG, "KWS listening started")
+        
+        kwsBuffer = ShortArray(0)
+        startCaptureIfNeeded()
+    }
+
+    /** Stop KWS audio capture and reset state. */
+    private fun stopKwsListening(reason: String = "manual") {
+        if (!kwsListening) return
+        kwsListening = false
+        Log.i(TAG, "KWS listening stopped: $reason")
+        checkStopCapture()
     }
 
     // ---- always-on call sign ----
@@ -227,9 +291,10 @@ class OverlayService : Service() {
         mainHandler.removeCallbacks(rearmRunnable)
         awaitingCommand = false
         if (enabled) {
-            if (!listening) startListening()
-        } else if (listening && !explicitActivation) {
-            stopListening("call-sign mode off")
+            if (!listening && !kwsListening) startKwsListening()
+        } else {
+            if (kwsListening) stopKwsListening("call-sign mode off")
+            else if (listening && !explicitActivation) stopListening("call-sign mode off")
         }
     }
 
@@ -268,24 +333,52 @@ class OverlayService : Service() {
         return hit.command
     }
 
-    private fun startPipeline() {
+    private fun startCaptureIfNeeded() {
         if (pipelineRunning) return
         pipelineRunning = true
         audioPreprocessor.startCapture(
             callback = { buffer ->
-                val raw = speechEngine.acceptWaveform(buffer)
-                if (raw != null && raw.isNotBlank()) {
-                    handleUtterance(raw)
-                } else {
-                    val partial = speechEngine.getPartialResult()
-                    if (partial.isNotEmpty()) emitPartial(partial)
+                if (kwsListening) {
+                    handleKwsAudio(buffer)
+                } else if (listening) {
+                    val raw = speechEngine.acceptWaveform(buffer)
+                    if (raw != null && raw.isNotBlank()) {
+                        handleUtterance(raw)
+                    } else {
+                        val partial = speechEngine.getPartialResult()
+                        if (partial.isNotEmpty()) emitPartial(partial)
+                    }
                 }
             },
             onSilenceDetected = {
-                mainHandler.post { stopListening("Silence detected (VAD)") }
+                if (listening) {
+                    mainHandler.post { stopListening("Silence detected (VAD)") }
+                }
             },
             onError = { error -> handleBackendError(error) }
         )
+    }
+
+    private fun handleKwsAudio(buffer: ShortArray) {
+        val newBuffer = ShortArray(kwsBuffer.size + buffer.size)
+        System.arraycopy(kwsBuffer, 0, newBuffer, 0, kwsBuffer.size)
+        System.arraycopy(buffer, 0, newBuffer, kwsBuffer.size, buffer.size)
+        kwsBuffer = newBuffer
+        
+        while (kwsBuffer.size >= KeywordSpotter.CHUNK_SAMPLES) {
+            val chunk = kwsBuffer.copyOfRange(0, KeywordSpotter.CHUNK_SAMPLES)
+            kwsBuffer = kwsBuffer.copyOfRange(KeywordSpotter.CHUNK_SAMPLES, kwsBuffer.size)
+            
+            val score = keywordSpotter.processAudio(chunk)
+            if (score >= 0f && keywordSpotter.isKeywordDetected(score)) {
+                Log.i(TAG, "KWS fired (score=$score) -> starting Whisper")
+                mainHandler.post {
+                    awaitingCommand = true
+                    startListening()
+                }
+                break
+            }
+        }
     }
 
     /**
@@ -297,6 +390,7 @@ class OverlayService : Service() {
         mainHandler.post {
             CrashLog.exception(this@OverlayService, "backend error", error)
             listening = false
+            kwsListening = false
             pipelineRunning = false
             startWhenReady = false
             // Do not re-arm after a backend failure. A mic or model fault that
@@ -329,6 +423,7 @@ class OverlayService : Service() {
             val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: FAILED - $resultMsg"
             transcriptHistory.add(0, logEntry)
             if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
+            saveTranscriptHistory()
             
             emitCommand("—", false, resultMsg)
             stopListening("no match")
@@ -346,10 +441,19 @@ class OverlayService : Service() {
         val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: $statusStr - ${result.message}"
         transcriptHistory.add(0, logEntry)
         if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
+        saveTranscriptHistory()
 
         emitCommand(category, result.success, result.message)
         stopListening("command handled")
         scheduleRearm()
+    }
+
+    private fun saveTranscriptHistory() {
+        runCatching {
+            val file = java.io.File(filesDir, "transcript.log")
+            val content = transcriptHistory.joinToString("|||")
+            file.writeText(content)
+        }.onFailure { Log.e(TAG, "Failed to save transcript history", it) }
     }
 
     // ---- floating bubble ----
@@ -405,7 +509,10 @@ class OverlayService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!dragged) {
-                        if (listening) stopListening("bubble tap") else startListening()
+                        if (listening) stopListening("bubble tap") else {
+                            explicitActivation = true
+                            startListening()
+                        }
                     }
                     true
                 }
@@ -486,6 +593,9 @@ class OverlayService : Service() {
                 popupTranscriptionText?.text = "..."
                 popupIntentText?.visibility = View.GONE
             }
+            STATUS_KWS_LISTENING -> {
+                // KWS is background/invisible — no popup shown
+            }
             STATUS_IDLE, "STOPPED" -> popupStatusText?.text = "Transcribing..."
             STATUS_MODEL_ERROR -> {
                 popupStatusText?.text = "Error"
@@ -531,6 +641,7 @@ class OverlayService : Service() {
                 startWhenReady = false
                 wakeWordEnabled = false
                 mainHandler.removeCallbacks(rearmRunnable)
+                stopKwsListening("explicit stop")
                 stopListening("explicit stop")
             }
             ACTION_SET_WAKE_WORD ->
@@ -544,11 +655,13 @@ class OverlayService : Service() {
         listening = false
         pipelineRunning = false
         wakeWordEnabled = false
+        kwsListening = false
         mainHandler.removeCallbacks(rearmRunnable)
         mainHandler.removeCallbacks(sleepRunnable)
         hideBubble()
         runCatching { audioPreprocessor.release() }
         runCatching { speechEngine.release() }
+        runCatching { keywordSpotter.release() }
         scope.cancel()
         emitStatus(STATUS_IDLE)
         super.onDestroy()
@@ -621,6 +734,7 @@ class OverlayService : Service() {
         const val STATUS_PREPARING = "PREPARING"
         const val STATUS_IDLE = "IDLE"
         const val STATUS_LISTENING = "LISTENING"
+        const val STATUS_KWS_LISTENING = "KWS_LISTENING"
         const val STATUS_MODEL_ERROR = "MODEL_ERROR"
 
         @Volatile

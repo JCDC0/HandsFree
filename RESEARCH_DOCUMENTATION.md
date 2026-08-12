@@ -54,12 +54,15 @@ The implemented system follows the 4-layer architecture described in the thesis:
 
 The system uses a **fine-tuned Whisper-tiny model** for Filipino/Tagalog ASR.
 
-**Model details:**
+**Model details & Development History:**
 - Base model: OpenAI Whisper-tiny (37.8M parameters)
 - Fine-tuned on Filipino/Tagalog speech data
 - Published at: https://huggingface.co/KarlShane11/handsfree-whisper-tiny-tl
 - Baseline WER: 82.72% → Fine-tuned WER: 63.15% (23.7% relative reduction)
 - Test set: 1,479-example held-out split
+
+**How the App and Model Co-developed (Collaboration with Karl):**
+The idea for the HandsFree Android application evolved directly alongside Karl's work on fine-tuning the Whisper-tiny model. Initially, the project started as a purely acoustic model fine-tuning exercise to see if Tagalog speech recognition could be made fast and reliable enough for on-device use. Once Karl successfully reduced the Word Error Rate (WER) and proved that a 37.8M-parameter model could execute efficiently on edge devices, the focus shifted to building a tangible, real-world utility around it. The app was architected specifically to house Karl's ONNX-exported model in an offline, deterministic pipeline—turning a theoretical model improvement into a functional accessibility tool for Android users.
 
 **ONNX export:** The model was exported using sherpa-onnx's `export-onnx.py`
 to three files:
