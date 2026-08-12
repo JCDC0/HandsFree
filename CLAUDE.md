@@ -302,8 +302,24 @@ Do not attempt Messaging or Scheduling live, even if they appear to work.
 
 ## 9. Current state — update this section
 
-**Last verified:** 2026-08-12 15:41 PHT, `./gradlew assembleDebug` green,
-APK 251.95 MB (includes Whisper ONNX models).
+**Last verified:** 2026-08-12 evening PHT, `./gradlew assembleDebug` and
+`installDebug` green on device 144512558D105352 (includes Whisper ONNX models).
+
+**Speech pipeline is running on hardware.** Whisper transcribes; the failures
+now come from the lexicon and the executor, not the model. Two structural
+hazards learned from the 18:28–18:32 log, worth knowing before editing the
+vocabulary:
+
+1. **Short trigger phrases are dangerous.** `LevenshteinMatcher` compares the
+   phrase against a prefix of the input, so a 2–3 letter phrase like `up`,
+   `go` or `tap` matches almost any utterance within threshold 2. Prefer
+   phrases of four characters or more; a lexicon entry that produces a
+   `contains` hit (distance 0) always beats these.
+2. **Ties are resolved by JSON key order**, which `org.json` does not
+   guarantee. Never let a normalised utterance contain triggers from two
+   different intents (e.g. "go home" hits APP_LAUNCH `go` *and* NAVIGATION
+   `home`). This is why the garbled `pomunta`/`humalik` map to `""` rather
+   than to `go`.
 
 **Speech backend:** Karl's fine-tuned Whisper-tiny-tl ONNX export.
 `INFERENCE_IMPLEMENTED = true`. The full pipeline is:
@@ -343,6 +359,40 @@ HandsFree_Team_Plan_Simple.pdf.
 ---
 
 ## CHANGELOG
+
+### 2026-08-12 (evening) — Lexicon round 2, tap-by-name and alarm repairs
+Driven by the 18:28–18:32 device voice-test log. Every failure in that log is
+addressed; all eleven utterances were replayed through a simulation of
+`TranslationLayer` + `LevenshteinMatcher` before building.
+- **Root cause, both alarm failures:** `android.permission.SET_ALARM` was never
+  declared. `AlarmClock` intents threw `SecurityException`, which
+  `catch (t: Throwable)` reported as the misleading "No alarm app available".
+  Permission added; `SecurityException` now caught and named separately.
+- **Root cause, "press games":** `navigate()` handed the *whole* utterance to
+  `DfsNodeLocator`, so it searched for a node labelled "press games". It now
+  searches for the argument after the trigger ("games").
+- `navigate()` branch tests are whole-word (`hasWord`) instead of `contains`.
+  "uksan treloh" was reaching scroll-up because the string contains "up"; any
+  utterance mentioning "backup" would have gone Back.
+- `SCHEDULING` now distinguishes a countdown (`ACTION_SET_TIMER`, "timer 45
+  minutes") from a wall-clock alarm (`ACTION_SET_ALARM` with `EXTRA_HOUR` /
+  `EXTRA_MINUTES` parsed from "7 p.m."). No time heard → Clock opens its
+  new-alarm screen rather than guessing.
+- `translation-lexicon.json`: ~50 entries added — `uksan`/`oksan`→open,
+  `treloh`/`trelo`→trello, `mang halap`/`halap`→search, `adobok`→adobo,
+  `skid`/`magskejul`→schedule, `ala`→alarm, `magtex`→text, `kakay`/`kay`→to,
+  `gamit`→using, `mesenjer`→messenger, `four five`→45, and the dropped
+  particles `ka`, `nga`, `yong`, plus garble `kangan`, `makalasin`, `humalik`,
+  `pomunta`. Removed a duplicate `"alarm"` key.
+- `intent-vocabulary.json`: SCHEDULING gained timer/countdown triggers;
+  SMART_SEARCH gained `look up`/`hanap`/`maghanap`; NAVIGATION gained
+  `click`/`select`/`tap on`/`press on`; MESSAGING gained `text to`/`message to`.
+- **Removed `"run"` from APP_LAUNCH.** Three-letter phrases match almost
+  anything at threshold 2 — "mang halap ka adobok" was classified APP_LAUNCH
+  (run) purely on prefix distance. `open`/`launch`/`start` cover the intent.
+- **Not done, deliberately:** MESSAGING now *classifies* correctly ("magtex
+  kakay john gamit messenger" → MESSAGING) but still returns "Messaging not in
+  prototype scope". Implementing it is the fourth feature §2 forbids.
 
 ### 2026-08-12 (late afternoon) — Device Testing Fixes
 - **Critical Fix:** Fixed two severe mathematical bugs in the Whisper ONNX audio preprocessing pipeline that were destroying audio data and causing the `[Polong]` hallucination:

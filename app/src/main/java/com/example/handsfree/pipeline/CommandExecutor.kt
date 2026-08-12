@@ -47,7 +47,7 @@ class CommandExecutor(
         return when (intentCategory) {
             "APP_LAUNCH" -> launchApp(argumentAfter(utterance, matchedPhrase))
             "CALL_ACCEPT" -> handleCall(utterance)
-            "NAVIGATION" -> navigate(utterance, a11y!!)
+            "NAVIGATION" -> navigate(utterance, matchedPhrase, a11y!!)
             "SMART_SEARCH" -> search(argumentAfter(utterance, matchedPhrase), a11y!!)
             "MESSAGING" -> Result(false, "Messaging not in prototype scope")
             "SCHEDULING" -> setAlarm(utterance)
@@ -152,26 +152,43 @@ class CommandExecutor(
 
     // ---- NAVIGATION ----
 
-    private fun navigate(utterance: String, a11y: HandsFreeAccessibilityService): Result {
+    private fun navigate(
+        utterance: String,
+        matchedPhrase: String,
+        a11y: HandsFreeAccessibilityService
+    ): Result {
         val u = utterance.lowercase()
         return when {
-            u.contains("back") -> Result(a11y.goBack(), "Back")
-            u.contains("home") -> Result(a11y.goHome(), "Home")
-            u.contains("recent") -> Result(a11y.openRecents(), "Recents")
-            u.contains("notification") -> Result(a11y.openNotifications(), "Notifications")
-            u.contains("down") || u.contains("next") -> Result(a11y.scroll(true), "Scrolled down")
-            u.contains("up") || u.contains("previous") -> Result(a11y.scroll(false), "Scrolled up")
+            hasWord(u, "back") -> Result(a11y.goBack(), "Back")
+            hasWord(u, "home") -> Result(a11y.goHome(), "Home")
+            hasWord(u, "recent") -> Result(a11y.openRecents(), "Recents")
+            hasWord(u, "notification") -> Result(a11y.openNotifications(), "Notifications")
+            hasWord(u, "down") || hasWord(u, "next") -> Result(a11y.scroll(true), "Scrolled down")
+            hasWord(u, "up") || hasWord(u, "previous") -> Result(a11y.scroll(false), "Scrolled up")
+            hasWord(u, "scroll") -> Result(a11y.scroll(true), "Scrolled down")
             else -> {
-                // Fall back to tapping whatever the user named.
-                val bounds = nodeLocator.findNode(a11y.getActiveRoot(), utterance)
+                // Tap-by-name. Search for what the user *named*, not the whole
+                // utterance: "press games" must look for "games", because no node
+                // is ever labelled "press games".
+                val target = argumentAfter(utterance, matchedPhrase).ifBlank { utterance }
+                val bounds = nodeLocator.findNode(a11y.getActiveRoot(), target)
                 if (bounds != null) {
-                    a11y.tapRect(bounds); Result(true, "Tapped \"$utterance\"")
+                    a11y.tapRect(bounds); Result(true, "Tapped \"$target\"")
                 } else {
-                    Result(false, "Nothing on screen matches \"$utterance\"")
+                    Result(false, "Nothing on screen matches \"$target\"")
                 }
             }
         }
     }
+
+    /**
+     * Whole-word (plus optional plural) test.
+     *
+     * Substring matching sent "uksan treloh" to scroll-up because it contains
+     * "up", and would send anything mentioning "backup" to the back gesture.
+     */
+    private fun hasWord(text: String, word: String): Boolean =
+        Regex("\\b${Regex.escape(word)}s?\\b").containsMatchIn(text)
 
     private fun search(query: String, a11y: HandsFreeAccessibilityService): Result {
         if (query.isBlank()) return Result(false, "No search query heard")
@@ -190,16 +207,84 @@ class CommandExecutor(
     // ---- SCHEDULING (entry point ready, not in demo scope) ----
 
     private fun setAlarm(utterance: String): Result {
-        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-            putExtra(AlarmClock.EXTRA_MESSAGE, utterance)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val u = utterance.lowercase()
+
+        // "timer 45 minutes" is a countdown, not a wall-clock alarm. Different
+        // AlarmClock action, and the stock Clock app handles both.
+        val timerSeconds = if (hasWord(u, "timer") || hasWord(u, "countdown")) {
+            parseDurationSeconds(u)
+        } else null
+
+        val (intent, label) = if (timerSeconds != null) {
+            Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                putExtra(AlarmClock.EXTRA_LENGTH, timerSeconds)
+                putExtra(AlarmClock.EXTRA_MESSAGE, "HandsFree timer")
+                putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            } to "Timer for ${timerSeconds / 60} min"
+        } else {
+            val time = parseTimeOfDay(u)
+            Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(AlarmClock.EXTRA_MESSAGE, "HandsFree alarm")
+                putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+                if (time != null) {
+                    putExtra(AlarmClock.EXTRA_HOUR, time.first)
+                    putExtra(AlarmClock.EXTRA_MINUTES, time.second)
+                }
+            } to if (time != null) {
+                "Alarm at %02d:%02d".format(time.first, time.second)
+            } else "Opening alarm"
         }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
         return try {
-            context.startActivity(intent); Result(true, "Opening alarm")
+            context.startActivity(intent)
+            Result(true, label)
+        } catch (se: SecurityException) {
+            // Missing SET_ALARM in the manifest looks exactly like "no clock app"
+            // from here. It cost a whole test round on 2026-08-12; name it.
+            Log.e(TAG, "AlarmClock denied — SET_ALARM permission missing", se)
+            Result(false, "Alarm blocked — SET_ALARM permission missing")
         } catch (t: Throwable) {
-            Result(false, "No alarm app available")
+            Log.e(TAG, "AlarmClock intent failed", t)
+            Result(false, "No clock app handled the alarm")
         }
+    }
+
+    /**
+     * Countdown length in seconds from phrases like "timer 45 minutes",
+     * "timer for 5 mins", "timer 1 hour". Returns null when no number is heard.
+     */
+    private fun parseDurationSeconds(u: String): Int? {
+        val withUnit = Regex("(\\d{1,3})\\s*(hour|hr|minute|min|second|sec)").find(u)
+        if (withUnit != null) {
+            val value = withUnit.groupValues[1].toIntOrNull() ?: return null
+            return when (withUnit.groupValues[2]) {
+                "hour", "hr" -> value * 3600
+                "second", "sec" -> value
+                else -> value * 60
+            }
+        }
+        // Bare number, e.g. "timer 45" — minutes is the safe reading.
+        val bare = Regex("\\b(\\d{1,3})\\b").find(u)?.groupValues?.get(1)?.toIntOrNull()
+        return bare?.times(60)
+    }
+
+    /**
+     * 24-hour (hour, minute) from "7 p.m.", "seven thirty am", "19:30".
+     * Returns null when no time is present, which leaves the Clock app on its
+     * new-alarm screen rather than guessing.
+     */
+    private fun parseTimeOfDay(u: String): Pair<Int, Int>? {
+        val m = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*([ap])\\s*\\.?\\s*m\\.?").find(u)
+            ?: Regex("(\\d{1,2}):(\\d{2})").find(u)
+            ?: return null
+        var hour = m.groupValues[1].toIntOrNull() ?: return null
+        val minute = m.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
+        val meridiem = m.groupValues.getOrNull(3).orEmpty()
+        if (meridiem == "p" && hour < 12) hour += 12
+        if (meridiem == "a" && hour == 12) hour = 0
+        if (hour !in 0..23 || minute !in 0..59) return null
+        return hour to minute
     }
 
     // ---- helpers ----

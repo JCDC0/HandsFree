@@ -4,15 +4,15 @@
   "_maintainers": "Add common phrasings you encounter during testing.",
   "intents": {
     "APP_LAUNCH": {
-      "phrases": ["open", "launch", "start", "run", "go to", "go", "buksan", "bukas"],
+      "phrases": ["open", "launch", "start", "go to", "go", "buksan", "bukas"],
       "action": "Launches an app by package name or common name"
     },
     "SMART_SEARCH": {
-      "phrases": ["search", "find", "look for", "google", "query", "search for"],
+      "phrases": ["search", "find", "look for", "look up", "google", "query", "search for", "hanap", "maghanap"],
       "action": "Types a query into the active search field"
     },
     "MESSAGING": {
-      "phrases": ["message", "text", "send message", "reply", "chat", "send"],
+      "phrases": ["message", "text", "send message", "message to", "text to", "reply", "chat", "send"],
       "action": "Opens messaging app and composes a message"
     },
     "CALL_ACCEPT": {
@@ -20,11 +20,11 @@
       "action": "Accepts or declines an incoming call"
     },
     "SCHEDULING": {
-      "phrases": ["remind", "reminder", "alarm", "schedule", "set alarm", "wake me"],
+      "phrases": ["remind", "reminder", "alarm", "alarm for", "schedule", "set alarm", "set a timer", "set timer", "timer", "countdown", "wake me", "wake me up"],
       "action": "Creates, reads, or checks reminders and alarms via Android system APIs"
     },
     "NAVIGATION": {
-      "phrases": ["back", "home", "scroll down", "scroll up", "swipe left", "swipe right", "tap", "press", "next", "previous", "down", "up", "recents", "notifications"],
+      "phrases": ["back", "home", "scroll down", "scroll up", "swipe left", "swipe right", "tap", "tap on", "press", "press on", "click", "select", "next", "previous", "down", "up", "recents", "notifications"],
       "action": "General UI navigation commands (scroll, swipe, tap grid coordinates)"
     }
   }

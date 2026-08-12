@@ -7,13 +7,46 @@
 > 
 > **YOUR TASK:** The User will provide you with raw garbled outputs from their voice tests. You MUST assist them by taking those garbled outputs, adding them to `c:\GitHub\HandsFree\app\src\main\assets\translation-lexicon.json` mapping to the correct English translations, and repairing the intent pipeline. The pipeline relies completely on `translation-lexicon.json` to normalize the audio model's output before it hits the Levenshtein matcher.
 
-**Last updated:** 2026-08-12 18:15 PHT
-**Author:** Antigravity (Google Deepmind) — Lexicon Expansion & UI Polish
-**Build status:** ✅ GREEN — `./gradlew assembleDebug` passes, APK 252 MB
+**Last updated:** 2026-08-12 evening PHT
+**Author:** Claude Code — voice-test log triage (18:28–18:32 batch)
+**Build status:** ✅ GREEN — `assembleDebug` + `installDebug` on device
 
 ---
 
-## What Was Done This Session
+## Latest Session — 18:28–18:32 voice-test log triage
+
+All eleven utterances from the log now resolve correctly. Verified by replaying
+them through a simulation of `TranslationLayer` + `LevenshteinMatcher` against
+the edited JSON, then building and installing.
+
+| Utterance | Was | Now |
+|---|---|---|
+| pindutin ang games | NAVIGATION, searched for node "press games" | taps the node named **games** |
+| uksan ang treloh | NAVIGATION (up) | APP_LAUNCH **trello** |
+| skid … timer four five minutes | APP_LAUNCH (go) | SCHEDULING → `ACTION_SET_TIMER` 45 min |
+| magset ng ala makalasin ko | SCHEDULING, "No alarm app available" | opens Clock's new-alarm screen |
+| magskejul ka ng alarm for 7 p.m. | SCHEDULING, "No alarm app available" | `ACTION_SET_ALARM` at **19:00** |
+| magtex kakay john gamit messenger | APP_LAUNCH (go) | MESSAGING (classification only — see below) |
+| maghanap ka ng adobo | searched "ka adobo" | searches **adobo** |
+| mang halap ka ng adobok | APP_LAUNCH (run) | SMART_SEARCH **adobo** |
+
+Three code-level root causes, none of which the lexicon alone could fix:
+
+1. **`SET_ALARM` permission was missing from the manifest.** Both alarm tests
+   failed with "No alarm app available", which was a lie — `AlarmClock` threw
+   `SecurityException` and the broad `catch (Throwable)` mislabelled it.
+2. **`navigate()` searched the node tree with the whole utterance**, so
+   tap-by-name could only ever work for a single-word command.
+3. **`navigate()` used substring tests**, so "up" inside "uksan" triggered a
+   scroll.
+
+**Still out of scope on purpose:** MESSAGING classifies correctly but executes
+nothing. Wiring it (recipient resolution → app choice → compose → send) is the
+fourth feature `CLAUDE.md` §2 rules out before the Aug 14 demo.
+
+---
+
+## Previous Session
 
 ### Critical Fix: Unblocked the Pipeline
 The app was completely non-functional because the previous AI agent (Cline) switched
