@@ -233,6 +233,12 @@ class OverlayService : Service() {
         emitResult(raw, normalized)
 
         val match = matcher?.classify(normalized)
+        val intentStr = if (match != null) "${match.first} (${match.second})" else "No match"
+        
+        val logEntry = "Narinig: $raw\nSalin: $normalized\nIntent: $intentStr"
+        transcriptHistory.add(0, logEntry)
+        if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
+
         if (match == null) {
             emitCommand("—", false, "No matching command")
             stopListening("no match")
@@ -495,5 +501,7 @@ class OverlayService : Service() {
 
         @Volatile
         var pipelineListener: PipelineListener? = null
+
+        val transcriptHistory = java.util.concurrent.CopyOnWriteArrayList<String>()
     }
 }

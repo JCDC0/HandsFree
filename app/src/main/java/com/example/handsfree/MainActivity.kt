@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         }
 
         showHistoryButton.setOnClickListener {
-            val history = if (transcriptHistory.isEmpty()) "No history recorded yet." else transcriptHistory.joinToString("\n\n---\n\n")
+            val history = if (OverlayService.transcriptHistory.isEmpty()) "No history recorded yet." else OverlayService.transcriptHistory.joinToString("\n\n---\n\n")
             val scrollView = android.widget.ScrollView(this)
             val textView = TextView(this).apply {
                 text = history
@@ -340,18 +340,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     // ---- OverlayService.PipelineListener ----
 
-    private val transcriptHistory = mutableListOf<String>()
-
     override fun onTranscriptionResult(rawTranscribed: String, normalized: String) {
         runOnUiThread {
             if (rawTranscribed.isNotBlank()) {
                 val match = levenshteinMatcher?.classify(normalized)
-                val intentStr = if (match != null) "${match.first} (${match.second})" else "No match"
-                
-                val logEntry = "Narinig: $rawTranscribed\nSalin: $normalized\nIntent: $intentStr"
-                transcriptHistory.add(0, logEntry)
-                if (transcriptHistory.size > 50) transcriptHistory.removeLast()
-                
                 transcribedText.text = rawTranscribed
                 
                 translatedText.text = normalized
