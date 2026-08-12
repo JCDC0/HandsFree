@@ -1,7 +1,14 @@
 # HandsFree — Agent Handoff / Progress Report
 
-**Last updated:** 2026-08-12 15:42 PHT
-**Author:** Antigravity (Google Deepmind) — Codebase analysis + pipeline fix session
+> [!IMPORTANT]
+> **REQUEST FOR ASSISTANCE (TO ALL FUTURE AGENTS):**
+> 
+> The current developer (the User) is actively testing the Voice-to-Intent pipeline. The biggest hurdle right now is the **Whisper ONNX phonetic transcription (Lexicon)**. Whisper often transcribes Tagalog/English commands phonetically or incorrectly (e.g., "skedyo at timer" instead of "schedule a timer", "adho-bore-sipi" instead of "adobo recipe", "boksan" instead of "buksan"). 
+> 
+> **YOUR TASK:** The User will provide you with raw garbled outputs from their voice tests. You MUST assist them by taking those garbled outputs, adding them to `c:\GitHub\HandsFree\app\src\main\assets\translation-lexicon.json` mapping to the correct English translations, and repairing the intent pipeline. The pipeline relies completely on `translation-lexicon.json` to normalize the audio model's output before it hits the Levenshtein matcher.
+
+**Last updated:** 2026-08-12 18:15 PHT
+**Author:** Antigravity (Google Deepmind) — Lexicon Expansion & UI Polish
 **Build status:** ✅ GREEN — `./gradlew assembleDebug` passes, APK 252 MB
 
 ---
