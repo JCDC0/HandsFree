@@ -5,6 +5,21 @@
 in Filipino, English, and Taglish
 **Institution:** Holy Angel University, School of Computing
 **Date:** August 2026
+**Last reconciled against the codebase:** 2026-08-12, commit `4989df2`
+
+> [!NOTE]
+> **Where this material belongs in the manuscript.** The manuscript's section
+> order is Introduction → Review of Related Literature → Conceptual Framework →
+> Objectives → Scope and Delimitations → Methods. Everything in this file
+> describes *our own implementation*, so it belongs under **Methods** (the RAD
+> iterative-prototyping narrative) and in Results/Discussion — **not** in the
+> Review of Related Literature. §8 below was originally drafted "for Chapter 2";
+> that is a misfile. RRL reviews other people's work; our own build decisions
+> are Methods.
+>
+> The manuscript is also written in **future tense** ("the system will
+> adopt…"). This file is past/present tense. Convert on merge or the section
+> will read as a different document.
 
 ---
 
@@ -17,15 +32,21 @@ The implemented system follows the 4-layer architecture described in the thesis:
 
 - Captures audio via Android's `AudioRecord` API
 - Configuration: 16,000 Hz sample rate, mono channel, 16-bit PCM
-- Energy-threshold Voice Activity Detection (RMS-based, threshold=300)
 - Runs on a background coroutine (`Dispatchers.IO`), never on the main thread
 - Buffer size: 1024 frames per read (~64ms of audio)
+- Energy-threshold Voice Activity Detection (RMS-based, threshold = 300) is used
+  **for endpointing only** — every captured chunk is forwarded to the recognizer
+  regardless of its RMS. See §8.2: an earlier revision *dropped* sub-threshold
+  chunks, which spliced the waveform and caused the model to hallucinate. This
+  distinction matters for the write-up; the VAD does not filter the audio.
 
 ### Layer 2: HandsFree Overlay Layer (5 sequential components)
 
 #### Component 1: Audio Preprocessing
 **Implementation:** `pipeline/AudioPreprocessor.kt`
-- RMS-based VAD filters silent buffers before forwarding to ASR
+- Continuous capture; all chunks are forwarded to the recognizer unfiltered
+- RMS VAD is used to detect ~1.5 s of trailing silence and close the utterance
+  (23 consecutive sub-threshold chunks at ~64 ms each)
 - Spectral subtraction is deferred (noted as Phase 1 limitation)
 
 #### Component 2: Offline ASR
@@ -67,24 +88,42 @@ to three files:
 thread). NNAPI deliberately excluded for reproducibility.
 
 #### Component 3: Translation Layer
-**Implementation:** `pipeline/TranslationLayer.kt` (87 lines)
+**Implementation:** `pipeline/TranslationLayer.kt` (89 lines)
 
 - Tagalog/Taglish → English token normalization
 - Greedy 2-token lookahead for multi-word phrase matching
-  (e.g., "mga setting" → "settings")
+  (e.g., "mga setting" → "settings"). **No trigram lookahead** — this bounds the
+  lexicon design: multi-word Tagalog time expressions must be encoded as pairs
+  (`alas siyete` → `7`, `ng gabi` → `p.m.`)
 - Single-token fallback if no bigram match found
-- Lexicon loaded from `assets/translation-lexicon.json` (~90 entries)
+- Tokens mapping to the empty string are deleted from the output. This is how
+  Tagalog particles (`po`, `mo`, `nga`, `lang`, `naman`) and known false-positive
+  words are neutralised
+- Lexicon loaded from `assets/translation-lexicon.json` — **340 entries** as of
+  2026-08-12, grown from 48 through four rounds of device voice-testing
 - English tokens pass through unchanged (by design)
 
 #### Component 4: Intent Classification (Finite State Machine path)
-**Implementation:** `pipeline/LevenshteinMatcher.kt` (116 lines)
+**Implementation:** `pipeline/LevenshteinMatcher.kt` (125 lines)
 
 - Standard O(N×M) dynamic-programming Levenshtein distance
-- Compares normalized English text against phrases in each intent category
-- Threshold-based matching (default threshold = 2)
+- Threshold-based matching (threshold = 2), lowest distance wins
 - Returns matched category and phrase, or null if no match within threshold
 - Categories: APP_LAUNCH, SMART_SEARCH, MESSAGING, CALL_ACCEPT,
   SCHEDULING, NAVIGATION
+
+**Scoring is a three-way minimum, not a plain edit distance.** For each
+vocabulary phrase *p* and normalized input *s*:
+
+```
+d(s,p) = 0                                        if s contains p
+       = min( lev(s[0..|p|], p), lev(s, p) )      otherwise
+```
+
+The `contains` short-circuit and the prefix comparison were added because a
+plain full-string distance cannot match a short trigger against a long
+conversational utterance (`lev("open facebook", "open") = 9`). Both terms are
+load-bearing and both have side effects — see §6 limitation 9 and §8.3.
 
 **Note:** `pipeline/AppStateMachine.kt` (97 lines) implements the 6-state
 FSM described in the manuscript (IDLE → LISTENING → PREPROCESSING →
@@ -123,9 +162,23 @@ pipeline. State management is currently handled by boolean flags in
 **Text input:** Sets text on focused editable fields, with fallback to
 first editable node in the tree.
 
-**Hardware activator:** Volume-down hold detection (1200ms threshold).
-Short presses pass through to preserve volume control. Long presses are
-consumed and trigger pipeline activation.
+**Activation.** Three routes, in order of reliability on the test device:
+
+1. **System accessibility button** (navigation bar) — registered via
+   `AccessibilityButtonController`, enabled by `flagRequestAccessibilityButton`.
+   This is the primary path; it is OS-provided and cannot be intercepted by the
+   OEM skin.
+2. **Volume-key hold** — `VOLUME_DOWN` alone for 1200 ms, or both volume keys
+   together for 600 ms. Requires `canRequestFilterKeyEvents`. Short presses pass
+   through so the user keeps volume control. **OEM-dependent**: the both-keys
+   variant exists specifically because the Tecno HiOS skin swallows single-key
+   holds before the accessibility service observes them.
+3. **Floating bubble** — draggable `TYPE_APPLICATION_OVERLAY` view, always
+   available.
+
+The migration from volume-key-primary to accessibility-button-primary is itself
+a finding worth reporting: hardware-key capture inside an accessibility service
+is documented Android API but is not portable across Android skins.
 
 ### Layer 4: Target Layer
 The system operates on any foreground third-party app through the
@@ -150,8 +203,21 @@ accessibility service — no cooperation from the target app is required.
 
 ### NAVIGATION
 - Back/Home/Recents/Notifications → global accessibility actions
+- Branch selection is **whole-word** (`hasWord`), not substring. An earlier
+  revision used `contains`, so the token `up` inside the mis-transcription
+  "uksan treloh" routed the command to scroll-up
 - Scroll → finds first scrollable container, falls back to swipe gesture
-- Tap-by-name → DFS node lookup on the normalized utterance
+- Tap-by-name → DFS node lookup on **the argument after the matched trigger**,
+  not the whole utterance. An earlier revision searched the tree for the literal
+  string "press games", which no node is ever labelled
+
+### Intent rerouting
+`execute()` intercepts an APP_LAUNCH whose extracted argument is an OS
+destination (home / back / recents / notifications) and reroutes it to
+NAVIGATION. This exists because "pumunta sa home screen" normalizes to "go
+home", which matches APP_LAUNCH `go` and NAVIGATION `home` at the same distance,
+and `org.json` does not guarantee key iteration order — the winner would
+otherwise vary between builds.
 
 ---
 
@@ -211,9 +277,21 @@ and documented as a constraint in `CLAUDE.md`.
 
 ## 6. Known Limitations (for Research Discussion)
 
-1. **ASR accuracy:** Whisper-tiny-tl achieves 63.15% WER on the test set.
-   This means approximately 37% of words are correctly recognized, which
-   is compensated by Levenshtein fuzzy matching (threshold=2).
+1. **ASR accuracy:** Whisper-tiny-tl achieves 63.15% WER on the held-out test
+   set, down from an 82.72% baseline.
+
+   > **Do not write "63.15% WER means 37% of words are recognized correctly."**
+   > WER is (substitutions + insertions + deletions) ÷ reference word count. It
+   > can exceed 100%, and insertions inflate it without reducing the number of
+   > correct words. The two quantities are only equal when insertions are zero.
+   > The defensible phrasing is: *"a 23.7% relative reduction in word error
+   > rate; the residual error is absorbed downstream by lexicon normalization
+   > and bounded-vocabulary fuzzy matching rather than by the acoustic model."*
+   > A panelist who knows ASR will ask about this.
+
+   The system's own accuracy claim is not WER but **command success rate** —
+   whether the intended action fired — which is the metric the Methods section
+   should specify and which device voice-testing measures directly.
 
 2. **No streaming:** Whisper processes a full 30-second window per inference.
    There are no live partial results — the UI shows a listening state
@@ -237,54 +315,178 @@ and documented as a constraint in `CLAUDE.md`.
 7. **Secure screens block accessibility:** Password fields, banking apps,
    and DRM content hide their node trees by design.
 
-8. **Volume-key activator:** May not work on all OEM skins that intercept
-   volume keys before accessibility services. Bubble tap is the fallback.
+8. **Volume-key activator:** Not portable across OEM skins that intercept
+   volume keys before accessibility services observe them. Mitigated by making
+   the system accessibility button the primary activator, with the floating
+   bubble as a second fallback.
+
+9. **Fuzzy matching false-accepts ordinary speech.** This is the most
+   defensible limitation in the study and should be reported, not hidden. At
+   threshold 2 with prefix comparison, the distance between a short trigger and
+   an arbitrary utterance is bounded by the trigger's own length: a two-letter
+   phrase such as `up` is within threshold 2 of **every** input, making it a
+   silent catch-all. Ordinary Tagalog words also collide — `bakit`≈`back`,
+   `salamat`≈`alarm`, `sandali`≈`send`, all at distance 2.
+
+   Two mitigations are implemented, both of which are design constraints rather
+   than fixes: (a) no trigger phrase shorter than four characters, and (b)
+   known-colliding words are mapped to the empty string in the lexicon. The
+   principled fix — a confidence margin, or requiring the runner-up intent to be
+   strictly further away before accepting a match — is not implemented. This is
+   the clearest direction for future work arising from the implementation.
+
+10. **The lexicon is hand-maintained and device-specific.** 340 entries derived
+    from this project's own voice-test logs on one device with a small number of
+    speakers. Generalization to other speakers, accents and microphones is
+    unmeasured, and lexicon growth is the system's main maintenance burden.
 
 ---
 
 ## 7. File Inventory
 
+Counted at commit `4989df2`, 2026-08-12. Re-count with `wc -l` before the final
+manuscript; these move every session.
+
 | File | Lines | Purpose |
 |---|---|---|
-| `MainActivity.kt` | 372 | Debug UI, permissions, loading dialog |
-| `pipeline/AudioPreprocessor.kt` | 193 | Mic capture, VAD |
-| `pipeline/WhisperOnnxEngine.kt` | 601 | Whisper ONNX inference |
-| `pipeline/VoskSpeechEngine.kt` | 203 | Legacy VOSK ASR (bypassed) |
-| `pipeline/VoskEngineAdapter.kt` | 63 | VOSK → SpeechEngine adapter |
-| `pipeline/SpeechEngine.kt` | 64 | ASR interface |
-| `pipeline/TranslationLayer.kt` | 87 | Tagalog→English normalization |
-| `pipeline/LevenshteinMatcher.kt` | 116 | Intent classification |
-| `pipeline/CommandExecutor.kt` | 225 | Intent → action routing |
-| `pipeline/DfsNodeLocator.kt` | 125 | Accessibility tree traversal |
-| `pipeline/AppStateMachine.kt` | 97 | FSM (implemented, not wired) |
-| `service/OverlayService.kt` | ~425 | Pipeline host, bubble, foreground service |
-| `service/HandsFreeAccessibilityService.kt` | 256 | OS bridge, gestures, volume activator |
-| `util/CrashLog.kt` | 115 | File-backed crash breadcrumbs |
-| `assets/intent-vocabulary.json` | ~32 | Intent trigger phrases |
-| `assets/translation-lexicon.json` | ~90 | Tagalog→English word map |
-| **Total Kotlin** | **~2,942** | |
+| `MainActivity.kt` | 467 | Debug UI, permission chaining, loading dialog |
+| `pipeline/AudioPreprocessor.kt` | 208 | Mic capture, VAD endpointing |
+| `pipeline/WhisperOnnxEngine.kt` | 615 | Whisper ONNX inference |
+| `pipeline/VoskSpeechEngine.kt` | 202 | Legacy VOSK ASR (bypassed) |
+| `pipeline/VoskEngineAdapter.kt` | 62 | VOSK → SpeechEngine adapter |
+| `pipeline/SpeechEngine.kt` | 63 | ASR interface |
+| `pipeline/TranslationLayer.kt` | 89 | Tagalog→English normalization |
+| `pipeline/LevenshteinMatcher.kt` | 125 | Intent classification |
+| `pipeline/CommandExecutor.kt` | 335 | Intent → action routing, rerouting |
+| `pipeline/DfsNodeLocator.kt` | 124 | Accessibility tree traversal |
+| `pipeline/AppStateMachine.kt` | 96 | FSM (implemented, not wired) |
+| `service/OverlayService.kt` | 516 | Pipeline host, bubble, transcript history |
+| `service/HandsFreeAccessibilityService.kt` | 322 | OS bridge, gestures, activators |
+| `util/CrashLog.kt` | 114 | File-backed crash breadcrumbs |
+| **Total Kotlin** | **3,338** | |
+
+| Asset | Entries | Purpose |
+|---|---|---|
+| `assets/intent-vocabulary.json` | 6 intents / 51 phrases | Intent trigger phrases |
+| `assets/translation-lexicon.json` | 340 | Tagalog/Taglish/garble → English |
 
 ---
 
-## 8. Technical Implementation Hurdles & Refinements (For Chapter 2)
+## 8. Technical Implementation Hurdles & Refinements
 
-During the final integration of the fine-tuned Whisper ONNX model (Karl's model) with the HandsFree application, several critical technical hurdles were encountered and resolved to achieve a functional pipeline:
+**Placement:** Methods (RAD iterative-prototyping narrative), or Discussion.
+Not Review of Related Literature — see the note at the top of this file.
 
-### 1. Audio Preprocessing Mathematics
-The `AudioPreprocessor` was initially delivering completely silent audio frames to the Whisper model, causing continuous hallucination loops (e.g., repeating the non-word `[Polong]`). This was traced to two complex mathematical bugs in the DSP pipeline:
-- **Mel Filter Bank:** The Slaney-normalized filter bank calculation incorrectly inverted its frequency subtraction `(start - frequency)`, producing negative amplitudes that were clamped to `0.0`. 
-- **FFT Phase Angle:** The Cooley-Tukey Fast Fourier Transform (FFT) recombination loop was calculating its phase angle using the wrong multiplier, effectively scrambling the complex frequencies of the input waveform before they were converted to Log-Mel spectrograms.
+During integration of the fine-tuned Whisper ONNX model with the HandsFree
+application, five hurdles were encountered and resolved. Each is reported with
+its failure symptom, because in every case the symptom pointed at the wrong
+component — this is itself the methodological finding: in a multi-stage offline
+pipeline, an upstream numerical fault presents as a downstream model-quality
+problem.
 
-### 2. Snappy Voice Activity Detection (VAD)
-The original implementation waited a fixed 8 seconds after the user stopped speaking before concluding the utterance. This created unacceptable latency. The trailing silence cutoff was dynamically reduced to **1.5 seconds**, vastly improving the responsiveness of the Voice-to-Intent pipeline.
+### 1. Log-Mel front-end numerical faults
+**Symptom:** the model emitted a repeating non-word (`[Polong]`) regardless of
+input — the classic presentation of a Whisper encoder fed silence or noise.
+The natural reading was that the fine-tuned model was inadequate. It was not;
+the model never received usable features. Two faults in the DSP front end:
 
-### 3. Substring Intent Matching
-The `LevenshteinMatcher` was originally failing to classify intents for long, conversational transcriptions (e.g., "open facebook") because the edit-distance between the long phrase and the short intent trigger word (e.g., "open") exceeded the threshold of 2. The matcher was re-engineered to perform **substring and prefix matching**, successfully extracting intent commands from continuous conversational strings.
+- **Mel filter bank.** The Slaney-normalized triangular filter inverted its
+  frequency subtraction, `(start − frequency)` where `(frequency − start)` was
+  required. Every filter produced negative values, which were then clamped to
+  `0.0`, so the entire 80-bin spectrogram was zero.
+- **FFT phase angle.** The Cooley–Tukey recombination stage computed its twiddle
+  angle from the wrong index product, permuting the spectrum.
 
-### 4. Continuous System State Auditing
-To support robust field testing, a **Transcript History Log** was built directly into the `OverlayService`. This background service captures up to 50 sequential utterances, logging the exact chronological flow of:
-1. The phonetic audio model output (Narinig).
-2. The normalized translation (Salin).
-3. The matched finite-state intent.
-4. The execution result of the accessibility service.
-This real-time debugging mechanism was critical for rapidly identifying and mapping Tagalog/English phonetic hallucinations into the `translation-lexicon.json`.
+**Methodological point:** a fine-tuned acoustic model cannot be evaluated on
+device until its feature front end has been verified independently against the
+reference implementation. Neither fault raises an exception; both produce
+fluent, confident, wrong output.
+
+### 2. Foreground-service microphone restriction
+On Android 11+ a foreground service that does not declare
+`FOREGROUND_SERVICE_MICROPHONE` and `foregroundServiceType="microphone"` is
+silently supplied digital zeroes rather than being denied. No permission error
+is raised. This compounded hurdle 1: two independent causes produced the same
+symptom, and the first fix appeared not to work.
+
+### 3. Endpointing versus filtering
+The initial design used RMS VAD to *drop* sub-threshold chunks and forwarded
+only the retained ones. Because Whisper consumes a fixed 30-second window,
+discarding interior chunks concatenates non-adjacent audio and destroys the
+prosodic continuity the model was trained on, producing further hallucination.
+The VAD was changed to endpoint-only: all chunks are forwarded, and the RMS
+signal is used solely to detect ~1.5 s of trailing silence and close the
+utterance. This also reduced the fixed 8-second capture window to a variable
+one, which is the responsiveness improvement — but the correctness reason
+matters more than the latency one.
+
+### 4. Prefix matching: a fix that introduced a second failure mode
+**Reported honestly, because the regression is the more interesting result.**
+
+A plain full-string Levenshtein distance cannot match a short trigger against a
+conversational utterance: `lev("open facebook", "open") = 9`, far outside
+threshold 2, so every multi-word command failed to classify. The matcher was
+extended to take the minimum of a `contains` test, a prefix-truncated distance,
+and the full distance.
+
+This fixed classification and immediately created a catch-all. Because the
+prefix comparison truncates the input to the phrase's length, the distance
+between a phrase of length *n* and an arbitrary input is bounded above by *n*.
+For `up` (n = 2) that bound is 2 — equal to the threshold — so `up` matched
+**every utterance ever spoken**, and unrecognised commands silently scrolled
+instead of reporting failure. The same mechanism makes ordinary Tagalog collide
+with English triggers at distance 2 (`bakit`≈`back`, `salamat`≈`alarm`).
+
+Mitigated by two constraints rather than an algorithmic change: no trigger
+phrase shorter than four characters, and known-colliding words mapped to the
+empty string in the lexicon. The principled fix — a confidence margin requiring
+the runner-up intent to be strictly further away — remains future work.
+
+**This is the strongest limitation finding the implementation produced**, and it
+generalizes: relaxing a distance metric to accommodate a noisy upstream stage
+widens the accept region symmetrically, admitting false positives at exactly the
+rate it recovers true ones.
+
+### 5. Ambiguity from non-deterministic key order
+"pumunta sa home screen" normalizes to "go home", which matches APP_LAUNCH `go`
+and NAVIGATION `home` at identical distance. The winner was decided by
+`org.json` key iteration order, which is unspecified — meaning the same utterance
+could behave differently across builds of the same source. Resolved by an
+explicit reroute in `CommandExecutor` rather than by tie-breaking in the frozen
+matcher. Worth reporting as a reproducibility hazard in rule-based classifiers
+whose vocabulary is loaded from an unordered format.
+
+### 6. Instrumentation as data collection
+A **Transcript History Log** was built into `OverlayService`, retaining the last
+50 utterances with a timestamp and all four pipeline stages: the raw model
+output (*Narinig*), the normalized translation (*Salin*), the matched intent,
+and the execution result. It is held in the service rather than the activity so
+entries survive the app being backgrounded — which is the normal case, since
+commands are issued while another app is in the foreground.
+
+This is not only a debugging aid. It is the **data collection instrument** for
+lexicon development: each logged failure is a labelled (mis-transcription →
+intended intent) pair, and the lexicon grew from 48 to 340 entries through four
+rounds of this loop. The Methods section should describe it as such, since it is
+how the system's Filipino-language coverage was actually derived.
+
+---
+
+## 9. What is verified, and how
+
+Stated explicitly because "works" has meant different things at different points
+in this project.
+
+| Claim | Evidence | Strength |
+|---|---|---|
+| Model WER 82.72% → 63.15% | Karl's held-out 1,479-example evaluation | Strong — reproducible from the notebook |
+| Whisper ONNX runs on device | Transcripts produced on the test handset | Strong |
+| On-device transcript matches the reference implementation | **Not done.** No bundled test `.wav` was compared against the notebook output for the same file | **Absent** — the front-end faults in §8.1 were found by symptom, not by this check |
+| Commands resolve to the correct intent | 52-phrase offline matrix replaying `TranslationLayer` + `LevenshteinMatcher`, 0 failures | Moderate — verifies the JSONs, not the audio path |
+| Commands execute correctly on device | Ad-hoc voice testing, logged in Transcript History | Weak — no fixed protocol, one device, one speaker |
+| Command success rate | **Not measured.** No denominator, no trial count | **Absent** |
+
+The gap between rows 4 and 6 is the study's main evidentiary weakness. A fixed
+list of N commands spoken M times each, on the test device, tallied
+success/failure, would convert the weakest row into the study's headline result
+and takes well under an hour to run.

@@ -8,33 +8,41 @@
 > The bottleneck is the **lexicon**, not the model. Bring voice-test logs, add
 > the garble to `app/src/main/assets/translation-lexicon.json`, rebuild.
 
-**Last updated:** 2026-08-12 evening PHT
-**Author:** Claude Code — voice-test log triage + lexicon round 3
-**Build status:** ✅ GREEN — `assembleDebug` + `installDebug` on device
+**Last updated:** 2026-08-12 night PHT
+**Build status:** GREEN — `assembleDebug` + `installDebug` on device
+144512558D105352. An APK with all of the below is installed and running.
 
 ---
 
 ## Where the demo stands
 
-| Feature | State |
-|---|---|
-| APP_LAUNCH | ✅ verified through the matcher, needs a device pass |
-| NAVIGATION — back / home / scroll / recents / notifications | ✅ |
-| NAVIGATION — tap-by-name ("pindutin ang Games") | ✅ fixed today, **device-test this first** |
-| CALL_ACCEPT | ✅ code complete, needs a second phone |
-| SMART_SEARCH | ✅ working, not in the demo script |
-| SCHEDULING (alarm + timer) | ✅ repaired today, not in the demo script |
-| MESSAGING | ⛔ classifies correctly, executes nothing — by design |
+Two columns, deliberately. "Code complete" and "seen working with my own eyes"
+have been conflated repeatedly in this project and it has cost real time.
 
-**Next three things, in order:** (1) device-test tap-by-name on a real home
-screen, (2) confirm the activator on each phone, (3) keep feeding the lexicon
-from every test round. Task list with owners: `DEV_GUIDE.md` §6.
+| Feature | Code | Spoken aloud on the device? |
+|---|---|---|
+| Whisper transcription (Tagalog) | ✅ | ✅ real transcripts, no hallucination |
+| APP_LAUNCH — YouTube, Facebook | ✅ | ✅ |
+| NAVIGATION — back, home | ✅ | ✅ |
+| NAVIGATION — scroll up/down | ✅ | ✅ |
+| NAVIGATION — tap-by-name ("pindutin ang Games") | ✅ fixed | ❌ **not retested since the fix** |
+| SMART_SEARCH — "hanapin ang sapatos" | ✅ | ✅ |
+| CALL_ACCEPT / DECLINE | ✅ | ❌ **never run — needs a second phone** |
+| SCHEDULING (alarm + timer) | ✅ repaired | ❌ not retested since the fix |
+| MESSAGING | ⛔ classifies only | n/a — out of scope by design |
 
-**Known limitation worth writing into the manuscript:** at Levenshtein
-threshold 2, short trigger phrases false-accept ordinary Tagalog words
-(`bakit`≈`back`, `salamat`≈`alarm`, `sandali`≈`send`). Mitigated by purging
-sub-four-character triggers and mapping common offenders to `""`; the
-principled fix is a confidence margin or tie-break in the matcher.
+**The three things that matter before the demo, in order:**
+
+1. **Place a real call to the device and say "sagutin".** CALL_ACCEPT is one of
+   the three demo features and has never executed once. If it fails, you need to
+   know tonight, not in front of the adviser.
+2. **Retest "pindutin ang Games"** on the actual home screen. The fix was
+   verified in an offline simulation, not aloud.
+3. **Run the demo sequence end to end, three times, without changing anything
+   between runs.** Consistency is what the adviser is judging, not breadth.
+
+Everything else is lexicon work, which is endless and can continue after the
+demo. Task list: `DEV_GUIDE.md` §6.
 
 ---
 
@@ -87,133 +95,53 @@ fourth feature `CLAUDE.md` §2 rules out before the Aug 14 demo.
 
 ---
 
-## Previous Session
+## What a collaborator should pick up
 
-### Critical Fix: Unblocked the Pipeline
-The app was completely non-functional because the previous AI agent (Cline) switched
-from VOSK to Whisper ONNX but left `INFERENCE_IMPLEMENTED = false`, which gated off
-the entire speech pipeline. Three changes fixed this:
+Ordered by value per hour, given the deadline. Full detail in `DEV_GUIDE.md` §6.
 
-1. **`WhisperOnnxEngine.kt` line 486:** `INFERENCE_IMPLEMENTED = false` → `true`
-2. **`OverlayService.kt` onReady callback:** Removed `INFERENCE_IMPLEMENTED` check
-   that was emitting `STATUS_MODEL_ERROR` and blocking bubble/listener
-3. **`OverlayService.kt` startListening():** Removed `INFERENCE_IMPLEMENTED` check
-   that was rejecting all listening requests
+### Before the demo
+1. **Run the three verification items above.** Not coding — testing. This is the
+   highest-value work available right now and anyone on the team can do it.
+2. **Lexicon rounds.** Speak commands, open Transcript History, copy the log,
+   add the garble to `translation-lexicon.json`. Follow `DEV_GUIDE.md` §4.
+   Never finished, always useful, cannot break the demo if done by the rules.
 
-### Device Testing Fixes (Hardware/OS Issues)
-- **Whisper Hallucination (`[Polong]`):** Fixed two severe mathematical bugs in the audio preprocessing pipeline.
-  1. The Slaney mel filter bank calculation inverted its subtraction `(start - frequency)` instead of `(frequency - start)`, causing it to output negative values which were clamped to 0.0. Every filter evaluated to 0.0, passing complete silence to Whisper.
-  2. The Cooley-Tukey FFT recombination loop calculated its phase angle using `subLength * radixFrequency` instead of `branch * subLength`, scrambling the complex frequencies of the input audio.
-  Also fixed Android 11+ privacy restrictions causing silent mic captures by explicitly declaring `FOREGROUND_SERVICE_MICROPHONE` and removed aggressive VAD slicing from `AudioPreprocessor`.
-- **Hardware Activation:** Added `flagRequestAccessibilityButton` to config and registered `AccessibilityButtonController` to allow the system's navigation bar accessibility button to trigger the app (bypassing OEM volume key intercepts).
-- **Setup Flow:** Automated the setup guide in `MainActivity` to chain permission prompts continuously and launch automatically on first run via `onResume()`.
+### After the demo — the two features we deliberately crossed out
+Both are named in the manuscript, so both need *something* written about them
+even though neither ships tomorrow.
 
-### Assistant UI & VAD Refinements (2026-08-12)
-- **Assistant Popup Overlay:** Added a Google Assistant-style bottom popup (`popup_assistant.xml`) that displays real-time state ("Listening...", "Transcribing..."), the transcribed Tagalog speech, and the translated/matched Intent action.
-- **Dynamic VAD Silence Cutoff:** Updated `AudioPreprocessor` to stop recording ~1.5s after the user stops speaking, rather than waiting a fixed 8 seconds. This provides a much snappier experience.
-- **Lexicon Expansion:** Added `pakibuksan` to map to `open` in `translation-lexicon.json` to fix missed intent classifications.
+3. **MESSAGING.** Currently classifies correctly and executes nothing.
+   "magtex kakay john gamit messenger" → intent MESSAGING → "not in prototype
+   scope". Finishing it means recipient resolution → app choice (SMS vs
+   Messenger — Filipino users overwhelmingly expect Messenger) → compose →
+   send, which is multi-step and stateful. It is the single likeliest thing to
+   fail live, which is why it is deferred. `CommandExecutor.execute()` has the
+   entry point.
+4. **Grid Overlay.** The manuscript presents it as co-equal to DFS node
+   location; the app does not implement it at all. This is a
+   documentation-versus-implementation gap that a panelist can find by reading
+   the paper. Either build a minimal version or write it explicitly as future
+   work — do not leave the manuscript claiming it exists.
 
-### UI Label Fixes
-- `activity_main.xml`: "Start Whisper" → "Start Listening"
-- `MainActivity.kt`: "Ready — tap Start Whisper" → activator_hint string
-- `MainActivity.kt`: "Loading Whisper Tagalog model…" → "Loading speech model…"
-
-### Vocabulary Expansion
-- `translation-lexicon.json`: 48 → ~90 entries (multi-word Tagalog phrases,
-  common particles like "ang", "mo", "na", device vocabulary)
-- `intent-vocabulary.json`: Added Tagalog trigger words directly to intents,
-  added more NAVIGATION phrases, fixed CALL_ACCEPT collisions
-
-### Docs Cleanup
-- Moved `TASKS.md`, `CURRENT_WORK_REPORT.md`, `HandsFree_Team_Plan_Simple.pdf`
-  to `junk/` folder
-- Updated `CLAUDE.md` §9 and CHANGELOG
+### Also outstanding
+5. **`AppStateMachine.kt` is dead code.** The manuscript describes a six-state
+   FSM (IDLE → LISTENING → PREPROCESSING → TRANSLATING → PROCESSING →
+   EXECUTING); the file implements it and nothing ever instantiates it. State is
+   tracked by booleans in `OverlayService`. Same class of gap as item 4.
+6. **Matcher confidence margin.** The principled fix for the false-accept
+   problem (`bakit`≈`back`). Post-demo, and worth doing because it is the
+   clearest "future work" claim the implementation supports.
+7. **Log unmatched utterances.** Right now a miss produces nothing durable —
+   and the misses are exactly the data the lexicon needs.
 
 ---
 
-## Current App State
+## Known limitation to write into the manuscript
 
-### What Works (code-complete, untested on device)
-| Feature | Pipeline Path | Status |
-|---|---|---|
-| Speech recognition | AudioPreprocessor → WhisperOnnxEngine | ✅ Code complete |
-| Translation | TranslationLayer (lexicon-based) | ✅ Working |
-| Intent matching | LevenshteinMatcher (threshold=2) | ✅ Working |
-| APP_LAUNCH | CommandExecutor → startActivity() | ✅ Code complete |
-| CALL_ACCEPT | CommandExecutor → TelecomManager | ✅ Code complete |
-| NAVIGATION | CommandExecutor → AccessibilityService | ✅ Code complete |
-| Volume-key activator | HandsFreeAccessibilityService.onKeyEvent | ✅ Code complete |
-| Floating bubble | OverlayService.showBubble() | ✅ Code complete |
-| Loading dialog | MainActivity.showLoading() | ✅ Code complete |
-
-### What Needs Testing on Physical Device
-1. **Volume-key activation** — OEM skins may swallow the event
-2. **Whisper inference speed** — 30s window processing time on Tecno Pova 7
-3. **Whisper transcription accuracy** — is the Tagalog output usable?
-4. **Accessibility service persistence** — does it survive reboot?
-5. **Mic capture quality** — VAD threshold (300) may need tuning
-
-### What is NOT Done
-- `AppStateMachine.kt` is dead code (never wired to pipeline)
-- Grid Overlay (Module F) — not implemented
-- MESSAGING intent — deliberately stubbed
-- SCHEDULING intent — minimal (fires AlarmClock intent only)
-- Multi-turn context — each utterance is independent
-- Whisper live partials — not possible (utterance-level model)
-
----
-
-## Files Modified (uncommitted)
-
-```
- M  app/src/main/java/com/example/handsfree/MainActivity.kt
- M  app/src/main/java/com/example/handsfree/pipeline/AudioPreprocessor.kt
- M  app/src/main/java/com/example/handsfree/pipeline/WhisperOnnxEngine.kt
- M  app/src/main/java/com/example/handsfree/service/OverlayService.kt
- M  app/src/main/res/layout/activity_main.xml
- M  app/src/main/assets/translation-lexicon.json
- M  app/src/main/assets/intent-vocabulary.json
- M  CLAUDE.md
- ?? junk/  (moved old docs here)
-```
-
----
-
-## If You Are a Continuation Agent
-
-### Priority 1: Hardware test
-Install on device and test the demo script:
-1. "buksan mo ang YouTube" → should open YouTube
-2. "bumalik" → should go back
-3. Incoming call → "sagutin" → should answer
-
-### Priority 2: Whisper accuracy assessment
-If transcription is garbage, the mel front end may have issues. Check:
-- Is the output Filipino/Tagalog text? (correct)
-- Is it English? (wrong — task should be "transcribe" not "translate")
-- Is it nonsense? (mel constants may be wrong)
-
-### Priority 3: Levenshtein threshold tuning
-If recognition is close but mismatched, raise threshold from 2 to 3 or 4.
-
-### Priority 4: VOSK fallback
-If Whisper is too slow or inaccurate, restore VOSK by changing
-`OverlayService.createEngine()` to return `VoskEngineAdapter(this)`.
-VOSK model files must be re-downloaded to `app/src/main/assets/`.
-
----
-
-## Key File Locations
-
-| File | Purpose |
-|---|---|
-| `CLAUDE.md` | Project memory — read this first |
-| `README.md` | Full architecture and development plan |
-| `pipeline/WhisperOnnxEngine.kt` | Whisper ONNX inference (601 lines) |
-| `service/OverlayService.kt` | Pipeline orchestration |
-| `pipeline/CommandExecutor.kt` | Intent → action execution |
-| `service/HandsFreeAccessibilityService.kt` | OS bridge, gestures |
-| `pipeline/LevenshteinMatcher.kt` | Fuzzy intent classification |
-| `pipeline/TranslationLayer.kt` | Tagalog→English normalization |
-| `assets/intent-vocabulary.json` | Intent trigger phrases |
-| `assets/translation-lexicon.json` | Tagalog→English word map |
+At Levenshtein threshold 2 with prefix comparison, the achievable distance
+between a trigger phrase and an arbitrary input is bounded by the phrase's own
+length, so short triggers become catch-alls (`up`, at two characters, matched
+every utterance) and ordinary Tagalog words false-accept (`bakit`≈`back`,
+`salamat`≈`alarm`, `sandali`≈`send`). Mitigated by two constraints — no trigger
+under four characters, and mapping known offenders to `""` — not by an
+algorithmic fix. Full write-up in `RESEARCH_DOCUMENTATION.md` §8.4.

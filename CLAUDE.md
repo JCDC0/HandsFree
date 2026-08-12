@@ -130,36 +130,35 @@ lexicon work, task list) · `PROGRESS.md` (current state) ·
 
 ## 4. Working agreement
 
-### Multiple agents work this repo. Read `TASKS.md` before doing anything.
+### Several people and several AI tools touch this repo. Read `DEV_GUIDE.md`.
 
-It is a pipeline with review gates, not parallel workers:
+There is no fixed agent pipeline any more. Different tools have been used at
+different points (Cowork-Claude, Claude Code, Cline/GPT, Antigravity) and the
+handoff has been informal. What holds regardless of which tool you are:
 
-```
-Cowork-Claude   spec + dispatch
-      |
-GPT Luna        IMPLEMENTS — the only role that writes feature code
-      |
-Claude Code     ORCHESTRATES + CHECKS — reviews, builds, runs, gates
-      |
-Cowork-Claude   final review and finishing touches
-```
+1. **`DEV_GUIDE.md` is the working document.** Command card, the six lexicon
+   rules, the task list. Read it before editing either JSON.
+2. **The code is the source of truth, not the docs.** If any `.md` in this repo
+   contradicts what you can read in the Kotlin, the Kotlin wins — say so and fix
+   the doc.
+3. **Prefer a lexicon entry over a code change, every time.**
+4. **Build before you hand anything back.** `./gradlew assembleDebug`.
+5. **Commit small.** Everyone edits the same two JSON files; long-lived
+   uncommitted work turns into a merge conflict nobody has time for.
 
-**If you are Claude Code here, you are the checker, not the author.** Review
-against the per-task checklists in `TASKS.md`, build it, run it on the device,
-and pass or fail it. Fix defects you find in review — surgically, in the file
-under review. Do not rewrite a task wholesale, and do not start new features.
-
-**Frozen files. Do not modify today unless a human says otherwise:**
+**Handle with care. Do not modify these without a specific reason:**
 `SpeechEngine.kt`, `VoskEngineAdapter.kt`, `VoskSpeechEngine.kt`,
 `DfsNodeLocator.kt`, `HandsFreeAccessibilityService.kt`,
-`LevenshteinMatcher.kt`, `TranslationLayer.kt`.
+`LevenshteinMatcher.kt`, `TranslationLayer.kt`, `WhisperOnnxEngine.kt`.
 
-They work. With one day to a demo, changing working code is the largest
-avoidable risk on the board. Spotted a real bug in one? Write it under Open
-Questions in `TASKS.md`. Do not fix it.
+They work, and several of them (the Whisper front end especially) fail
+*silently* when broken — you get fluent wrong output, not an exception. With the
+demo this close, changing working code is the largest avoidable risk on the
+board. `CommandExecutor.kt` and the two JSON assets are the intended surface for
+day-to-day fixes.
 
-**Build after every change.** `./gradlew assembleDebug`. Never hand over Kotlin
-that has not compiled. Commit per lane so a bad lane can be reverted alone.
+Spotted a real bug in a handle-with-care file? Write it in `DEV_GUIDE.md` §6
+rather than fixing it mid-session.
 
 ### Between the app repo and the research workstream
 
@@ -177,69 +176,55 @@ manuscript, Drive, and team coordination). Prompts may be relayed between them.
 
 ---
 
-## 5. THE NEXT TASK — Whisper ONNX
+## 5. Speech backend — Whisper ONNX (DONE, do not redo)
 
-Model is public and verified:
+Karl's fine-tuned model, running on device since 2026-08-12.
 **https://huggingface.co/KarlShane11/handsfree-whisper-tiny-tl**
 37.8M params, whisper-tiny fine-tuned on Filipino/Tagalog.
-Baseline WER 82.72% → 63.15% fine-tuned, same 1,479-example held-out test set.
+Baseline WER 82.72% -> 63.15% fine-tuned, 1,479-example held-out test set.
 
-Karl is producing the export with sherpa-onnx's `export-onnx.py`.
+`encoder.onnx`, `decoder.onnx` and `tokens.txt` live in
+`app/src/main/assets/whisper/` (gitignored, bundled locally, ~150 MB).
+`INFERENCE_IMPLEMENTED = true`. ONNX Runtime 1.19.0, CPU only, 2 intra-op
+threads. NNAPI deliberately not enabled.
 
-### When `encoder.onnx`, `decoder.onnx` and `tokens.txt` arrive
+### The constants, for reference when debugging a bad transcript
 
-1. Put them in `app/src/main/assets/whisper/` (gitignored — bundled locally)
-2. Set `WhisperOnnxEngine.MODEL_PRESENT = true`
-3. Add to `app/build.gradle.kts`:
-   `implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.0")`
-4. Implement the two blocks marked `IMPLEMENT WHEN MODEL LANDS`
+These are already implemented correctly. They are recorded because if a
+transcript ever goes wrong again, this is the list to check against.
 
-### prepare()
+1. PCM -> float, divide by `32768f`, clamp to [-1, 1]
+2. Pad or trim to exactly 480,000 samples (30 s at 16 kHz), zero-padded right
+3. Log-Mel: `n_fft = 400`, `hop_length = 160`, periodic Hann, `n_mels = 80`,
+   Slaney-normalised filterbank, output `[1, 80, 3000]`,
+   log10 -> `clamp(max - 8.0)` -> `(x + 4.0) / 4.0`
+4. Encoder -> cross-attention KV
+5. Greedy decode, forced prefix exactly
+   `<|startoftranscript|> <|tl|> <|transcribe|> <|notimestamps|>`,
+   loop until `<|endoftext|>` (50257) or 448 tokens
+6. Detokenise via base64 `tokens.txt`, strip all `<|...|>` tokens
 
-```kotlin
-env = OrtEnvironment.getEnvironment()
-val opts = OrtSession.SessionOptions().apply { setIntraOpNumThreads(2) }
-encoder = env.createSession(modelPath(ENCODER_FILE), opts)
-decoder = env.createSession(modelPath(DECODER_FILE), opts)
-```
+**Language `tl`, task `transcribe`, never `translate`.** Must match Karl's
+evaluation config or the reported WER does not describe what the app produces.
 
-Add NNAPI only after CPU works. It is a common source of silent wrong output on
-mid-range devices.
+### The verification step that was never done
 
-### flushAndTranscribe() — the hard part
+The plan was: bundle one known `.wav` from the test set, run it through the app,
+and compare against Karl's notebook output for the same file. **That comparison
+has still not been made.** The mel-filter and FFT faults (see CHANGELOG,
+late afternoon) were found by symptom instead, after they had already cost
+hours and looked like a bad model.
 
-Whisper's front end is unforgiving. Get any of this wrong and you get fluent
-nonsense, which reads as a bad model rather than a bad preprocessing step.
+If a transcript ever regresses, do this comparison first rather than guessing.
+It is also the single cheapest thing that would strengthen the manuscript's
+claim that the deployed model matches the evaluated one.
 
-1. **PCM → float**, divide by `32768f`, clamp to [-1, 1]
-2. **Pad or trim to exactly 480,000 samples** (30 s at 16 kHz). Whisper always
-   consumes 30 s. Shorter audio is zero-padded on the right.
-3. **Log-Mel spectrogram**, and these constants are not negotiable:
-   - `n_fft = 400`, `hop_length = 160`, Hann window
-   - `n_mels = 80`
-   - result shape `[1, 80, 3000]`
-   - log10, then `clamp(max - 8.0)`, then `(x + 4.0) / 4.0`
-4. **Encoder** → `encoderOut`
-5. **Greedy decode**, forced prefix exactly:
-   `<|startoftranscript|> <|tl|> <|transcribe|> <|notimestamps|>`
-   then loop until `<|endoftext|>` or 448 tokens
-6. **Detokenise** via `tokens.txt`, strip all `<|...|>` tokens
-
-**Language must be `tl` and task must be `transcribe`, not `translate`.** This
-must match Karl's evaluation config exactly or the reported WER does not apply
-to what the app produces.
-
-### Verify before wiring into the UI
-
-Bundle one known `.wav` from the test set, run it through, and compare the
-transcript against Karl's notebook output for the same file. If they differ, the
-mel front end is wrong — do not proceed until they match.
-
-### Then
+### Post-demo cleanup, not before
 
 Drop the `com.alphacephei:vosk-android` dependency and delete
-`VoskSpeechEngine.kt` and `VoskEngineAdapter.kt`. VOSK is roughly 45 MB of the
-48 MB APK.
+`VoskSpeechEngine.kt` and `VoskEngineAdapter.kt`. VOSK is dead weight in the
+APK now, but it is also the only fallback if Whisper misbehaves the morning of
+the demo. Remove it after Aug 14, not before.
 
 ---
 
@@ -351,24 +336,31 @@ Full working rules for editing the two JSON files: `DEV_GUIDE.md` §4.
 AudioPreprocessor → WhisperOnnxEngine → TranslationLayer →
 LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
 
-**Working code (not yet tested on hardware):**
-- Whisper ONNX inference (log-Mel, encoder, decoder, greedy decode)
-- Activation by volume-key hold and floating bubble
-- APP_LAUNCH with fuzzy Levenshtein matching against installed packages
-- CALL_ACCEPT / CALL_DECLINE via TelecomManager + node-tree fallback
-- NAVIGATION: back, home, recents, scroll, notifications, tap-by-name
-- Loading dialog during model preparation
-- Command success/failure reporting in debug UI and notification
+**Confirmed working on the device** (spoken aloud, action observed):
+- Whisper ONNX inference — real Tagalog transcripts, no hallucination loop
+- Activation via the system accessibility button
+- APP_LAUNCH — "buksan mo ang YouTube", "pakibuksan ang Facebook"
+- NAVIGATION — back ("balik"/"bumalik"), home, scroll up/down
+- SMART_SEARCH — "hanapin ang sapatos"
+- Transcript History log captures all four pipeline stages per utterance
+
+**Code-complete but never executed on the device:**
+- **CALL_ACCEPT.** Needs a second phone to place a real ringing call. This is
+  one third of the demo scope and has never once been run. Highest-risk item.
+- SCHEDULING alarm/timer — repaired after the log triage, not re-tested aloud
+- Volume-key activator — accessibility button is used instead; volume path is
+  unverified on this OEM skin
+- Tap-by-name against a real home screen with folders and emoji labels
 
 **Not wired:** `AppStateMachine.kt` (scaffolded, never instantiated).
 Multi-turn commands hold no context — each utterance is independent.
 
-**Untested on hardware:** the volume-key activator. Some OEM skins intercept
-volume keys before accessibility services see them. **Test this first — it is
-the demo's opening move and there is a fallback only if you know early.**
+**Never measured:** command success rate. There is no trial count and no
+denominator anywhere in this project. See `RESEARCH_DOCUMENTATION.md` §9.
 
-**Obsolete docs moved to `junk/`:** TASKS.md, CURRENT_WORK_REPORT.md,
-HandsFree_Team_Plan_Simple.pdf.
+**Obsolete docs in `junk/`:** TASKS.md (the old agent-pipeline board),
+CURRENT_WORK_REPORT.md, HandsFree_Team_Plan_Simple.pdf, the July/VOSK-era
+README, manuscript-extract.md.
 
 ---
 

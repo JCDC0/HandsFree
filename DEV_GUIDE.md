@@ -9,7 +9,12 @@ For groupmates and for any AI agent picking this up. Read `CLAUDE.md` first
 
 ## 1. The command set (say exactly these)
 
-This is the demo card. Everything here is verified to resolve correctly.
+This is the demo card. Everything here is verified to **resolve** correctly —
+meaning it reaches the right intent with the right argument, checked by replaying
+it through the matcher offline. Bold entries have additionally been **spoken
+aloud on the device and observed to work**. The rest have not; see `PROGRESS.md`
+for which is which. The distinction matters — do not assume an unbolded row will
+work live just because it appears here.
 
 | Do this | Say |
 |---|---|

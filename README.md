@@ -47,5 +47,7 @@ export is bundled locally and gitignored (~40 MB); the APK is ~252 MB.
 ## Scope
 
 Three demo features: **APP_LAUNCH**, **CALL_ACCEPT**, **NAVIGATION**.
-`SMART_SEARCH` and `SCHEDULING` work but are not in the demo script.
-`MESSAGING` classifies correctly and deliberately does not execute.
+`SMART_SEARCH` works and is not in the demo script. `SCHEDULING` is implemented
+but has not been re-tested aloud since its last repair. `MESSAGING` classifies
+correctly and deliberately does not execute — see `PROGRESS.md` for why, and for
+what a collaborator should pick up next.
