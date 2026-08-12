@@ -305,17 +305,30 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     // ---- OverlayService.PipelineListener ----
 
+    private val transcriptHistory = mutableListOf<String>()
+
     override fun onTranscriptionResult(rawTranscribed: String, normalized: String) {
         runOnUiThread {
-            transcribedText.text = rawTranscribed.ifBlank { "—" }
-            translatedText.text = normalized.ifBlank { "—" }
-
-            // Run intent classification and show result in debug UI
-            val match = levenshteinMatcher?.classify(normalized)
-            intentText.text = if (match != null) {
-                "${match.first}  (matched: \"${match.second}\")"
+            if (rawTranscribed.isNotBlank()) {
+                val match = levenshteinMatcher?.classify(normalized)
+                val intentStr = if (match != null) "${match.first} (${match.second})" else "No match"
+                
+                val logEntry = "Narinig: $rawTranscribed\nSalin: $normalized\nIntent: $intentStr"
+                transcriptHistory.add(0, logEntry)
+                if (transcriptHistory.size > 20) transcriptHistory.removeLast()
+                
+                transcribedText.text = transcriptHistory.joinToString("\n\n---\n\n")
+                
+                translatedText.text = normalized
+                intentText.text = if (match != null) {
+                    "${match.first}  (matched: \"${match.second}\")"
+                } else {
+                    "No match"
+                }
             } else {
-                "No match"
+                if (transcriptHistory.isEmpty()) transcribedText.text = "—"
+                translatedText.text = "—"
+                intentText.text = "—"
             }
         }
     }

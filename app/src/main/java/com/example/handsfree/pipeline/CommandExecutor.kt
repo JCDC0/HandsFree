@@ -173,14 +173,17 @@ class CommandExecutor(
         }
     }
 
-    // ---- SMART_SEARCH (entry point ready, not in demo scope) ----
-
     private fun search(query: String, a11y: HandsFreeAccessibilityService): Result {
         if (query.isBlank()) return Result(false, "No search query heard")
-        return if (a11y.dispatchTextInput(query)) {
+        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+            putExtra(android.app.SearchManager.QUERY, query)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
             Result(true, "Searching for \"$query\"")
-        } else {
-            Result(false, "No text field on screen")
+        } catch (t: Throwable) {
+            Result(false, "No search app available")
         }
     }
 
