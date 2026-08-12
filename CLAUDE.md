@@ -105,6 +105,26 @@ usually a better fix than changing matcher code.** Try that first.
 
 ## 4. Working agreement
 
+### Multiple agents work this repo. Read `TASKS.md` before editing anything.
+
+Concurrent workers: Claude Code, Hermes/Luna, and Claude in Cowork (review and
+research). `TASKS.md` divides work by **file ownership, not by task** — two
+agents editing one file an hour apart costs more than either saves.
+
+**Frozen files. Do not modify today unless a human says otherwise:**
+`SpeechEngine.kt`, `VoskEngineAdapter.kt`, `VoskSpeechEngine.kt`,
+`DfsNodeLocator.kt`, `HandsFreeAccessibilityService.kt`,
+`LevenshteinMatcher.kt`, `TranslationLayer.kt`.
+
+They work. With one day to a demo, changing working code is the largest
+avoidable risk on the board. Spotted a real bug in one? Write it under Open
+Questions in `TASKS.md`. Do not fix it.
+
+**Build after every change.** `./gradlew assembleDebug`. Never hand over Kotlin
+that has not compiled. Commit per lane so a bad lane can be reverted alone.
+
+### Between the app repo and the research workstream
+
 JC runs Claude Code (here, for app code) alongside Claude in Cowork (for the
 manuscript, Drive, and team coordination). Prompts may be relayed between them.
 
