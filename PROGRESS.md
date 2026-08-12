@@ -20,7 +20,7 @@ the entire speech pipeline. Three changes fixed this:
    that was rejecting all listening requests
 
 ### Device Testing Fixes (Hardware/OS Issues)
-- **Whisper Hallucination (`[Polong]`):** Removed aggressive VAD from `AudioPreprocessor` that was slicing audio too tightly, causing the Whisper ONNX model to hallucinate.
+- **Whisper Hallucination (`[Polong]`):** Fixed Android 11+ privacy restrictions causing silent mic captures. Added `FOREGROUND_SERVICE_MICROPHONE` permission and set `foregroundServiceType="microphone"` in `AndroidManifest.xml` and `OverlayService.kt`. Without this, the OS silently fills `AudioRecord` buffers with zeroes when capturing in the background, causing Whisper to hallucinate tokens like `[Polong]`. Also removed aggressive VAD from `AudioPreprocessor` that was slicing audio too tightly.
 - **Hardware Activation:** Added `flagRequestAccessibilityButton` to config and registered `AccessibilityButtonController` to allow the system's navigation bar accessibility button to trigger the app (bypassing OEM volume key intercepts).
 - **Setup Flow:** Automated the setup guide in `MainActivity` to chain permission prompts continuously rather than requiring manual back-and-forth.
 

@@ -381,12 +381,16 @@ class OverlayService : Service() {
     }
 
     private fun startForegroundCompat(notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                }
+                startForeground(NOTIF_ID, notification, type)
                 return
             } catch (se: SecurityException) {
-                Log.w(TAG, "specialUse FGS rejected; using plain startForeground", se)
+                Log.w(TAG, "microphone FGS rejected; using plain startForeground", se)
             }
         }
         startForeground(NOTIF_ID, notification)
