@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Dark counterparts. Names must match values/colors.xml exactly — a name
+      defined in only one of the two files silently keeps the light value.
+
+      Surfaces are near-black rather than pure black so the card elevation
+      shadows still read, and the accent blues are lightened because #1565C0 on
+      a dark surface fails contrast badly.
+    -->
+    <color name="hf_background">#121212</color>
+    <color name="hf_card">#1E1E1E</color>
+
+    <color name="hf_text_primary">#ECECEC</color>
+    <color name="hf_text_body">#D5D5D5</color>
+    <color name="hf_text_label">#9E9E9E</color>
+    <color name="hf_intent">#64B5F6</color>
+
+    <color name="hf_button_primary_bg">#3A3A5C</color>
+    <color name="hf_button_primary_text">#FFFFFF</color>
+    <color name="hf_button_neutral_bg">#2C2C2C</color>
+    <color name="hf_button_neutral_text">#DDDDDD</color>
+    <color name="hf_button_accent_bg">#14324B</color>
+    <color name="hf_button_accent_text">#7FBFF5</color>
+
+    <color name="hf_toggle_on_bg">#1F3D24</color>
+
+    <color name="hf_status_active">#64B5F6</color>
+    <color name="hf_status_success">#81C784</color>
+    <color name="hf_status_error">#EF5350</color>
+</resources>

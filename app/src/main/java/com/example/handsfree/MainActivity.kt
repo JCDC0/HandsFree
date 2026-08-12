@@ -8,7 +8,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Color
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -77,7 +77,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     /** Clears transient error messages after a short delay. */
     private val errorClearHandler = Handler(Looper.getMainLooper())
     private val errorClearRunnable = Runnable {
-        statusText.setTextColor(Color.BLACK)
+        statusText.setTextColor(themed(R.color.hf_text_primary))
         statusText.text = "..."
     }
 
@@ -199,9 +199,16 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private fun updateWakeWordButton() {
         wakeWordButton.text = if (wakeWordOn) "👂 Call sign: ON" else "👂 Call sign: OFF"
         wakeWordButton.backgroundTintList = ColorStateList.valueOf(
-            if (wakeWordOn) 0xFFC8E6C9.toInt() else 0xFFEEEEEE.toInt()
+            themed(if (wakeWordOn) R.color.hf_toggle_on_bg else R.color.hf_button_neutral_bg)
         )
     }
+
+    /**
+     * Resolve a colour that has a `values-night` counterpart. Never hardcode a
+     * colour int here — the screen ignored the system dark setting for exactly
+     * that reason.
+     */
+    private fun themed(colorRes: Int): Int = ContextCompat.getColor(this, colorRes)
 
     private fun hasAnswerCallPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ANSWER_PHONE_CALLS) ==
@@ -220,10 +227,15 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             view.setPadding(view.paddingLeft, bars.top, view.paddingRight, bars.bottom)
             insets
         }
-        // The debug UI is light regardless of the system theme, so the status
-        // bar icons have to be dark or they vanish into the background.
-        WindowCompat.getInsetsController(window, window.decorView)
-            .isAppearanceLightStatusBars = true
+        // System bar icons must contrast with our own background, which now
+        // follows the system theme: dark icons on the light palette, light icons
+        // on the dark one. Getting this backwards makes the clock invisible.
+        val darkTheme = resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !darkTheme
+            isAppearanceLightNavigationBars = !darkTheme
+        }
 
         installCrashHandler()
 
@@ -252,7 +264,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         translatedText.text = "..."
         intentText.text = "—"
         statusText.text = getString(R.string.activator_hint)
-        statusText.setTextColor(Color.BLACK)
+        statusText.setTextColor(themed(R.color.hf_text_primary))
         pipelineActive = false
         startButton.text = "Start Listening"
         startButton.isEnabled = true
@@ -486,7 +498,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     startButton.isEnabled = true
                     startButton.text = "Stop Listening"
                     pipelineActive = true
-                    statusText.setTextColor(Color.parseColor("#1E88E5"))
+                    statusText.setTextColor(themed(R.color.hf_status_active))
                     statusText.text = "Listening — speak your command"
                 }
                 "STOPPED", "IDLE" -> {
@@ -494,7 +506,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     startButton.isEnabled = true
                     startButton.text = "Start Listening"
                     pipelineActive = false
-                    statusText.setTextColor(Color.BLACK)
+                    statusText.setTextColor(themed(R.color.hf_text_primary))
                     statusText.text = getString(R.string.activator_hint)
                 }
                 "MODEL_ERROR" -> {
@@ -502,7 +514,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     startButton.isEnabled = true
                     startButton.text = "Start Listening"
                     pipelineActive = false
-                    statusText.setTextColor(Color.RED)
+                    statusText.setTextColor(themed(R.color.hf_status_error))
                 }
             }
         }
@@ -516,7 +528,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     override fun onCommandExecuted(intent: String, success: Boolean, message: String) {
         runOnUiThread {
             intentText.text = if (success) "$intent — $message" else "$intent — FAILED: $message"
-            intentText.setTextColor(if (success) Color.parseColor("#2E7D32") else Color.RED)
+            intentText.setTextColor(
+                themed(if (success) R.color.hf_status_success else R.color.hf_status_error)
+            )
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
     }
@@ -527,7 +541,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             pipelineActive = false
             startButton.isEnabled = true
             startButton.text = "Start Listening"
-            statusText.setTextColor(Color.RED)
+            statusText.setTextColor(themed(R.color.hf_status_error))
             statusText.text = message
         }
     }

@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug UI. Colours come from @color/hf_* so the screen follows the system
+  light/dark setting — see values/colors.xml and values-night/colors.xml.
+  Do not put a raw #hex back in here.
+-->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FAFAFA">
+    android:background="@color/hf_background">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,7 +23,7 @@
             android:text="🎙️ HandsFree"
             android:textSize="26sp"
             android:textStyle="bold"
-            android:textColor="#1A1A2E"
+            android:textColor="@color/hf_text_primary"
             android:gravity="center"
             android:layout_marginBottom="4dp" />
 
@@ -27,7 +32,7 @@
             android:layout_height="wrap_content"
             android:text="Offline Voice Overlay"
             android:textSize="13sp"
-            android:textColor="#888888"
+            android:textColor="@color/hf_text_label"
             android:gravity="center"
             android:layout_marginBottom="20dp" />
 
@@ -38,7 +43,7 @@
             android:layout_height="wrap_content"
             card_view:cardCornerRadius="12dp"
             card_view:cardElevation="4dp"
-            card_view:cardBackgroundColor="#FFFFFF"
+            card_view:cardBackgroundColor="@color/hf_card"
             android:layout_marginBottom="16dp">
 
             <LinearLayout
@@ -53,7 +58,7 @@
                     android:text="STATUS"
                     android:textSize="10sp"
                     android:textStyle="bold"
-                    android:textColor="#888888"
+                    android:textColor="@color/hf_text_label"
                     android:letterSpacing="0.1"
                     android:layout_marginBottom="6dp" />
 
@@ -63,7 +68,7 @@
                     android:layout_height="wrap_content"
                     android:text="HandsFree ready"
                     android:textSize="16sp"
-                    android:textColor="#1A1A2E"
+                    android:textColor="@color/hf_text_primary"
                     android:textStyle="bold" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -75,7 +80,7 @@
             android:layout_height="wrap_content"
             card_view:cardCornerRadius="12dp"
             card_view:cardElevation="4dp"
-            card_view:cardBackgroundColor="#FFFFFF"
+            card_view:cardBackgroundColor="@color/hf_card"
             android:layout_marginBottom="16dp">
 
             <LinearLayout
@@ -90,7 +95,7 @@
                     android:text="NARINIG  (Transcribed)"
                     android:textSize="10sp"
                     android:textStyle="bold"
-                    android:textColor="#888888"
+                    android:textColor="@color/hf_text_label"
                     android:letterSpacing="0.1"
                     android:layout_marginBottom="6dp" />
 
@@ -101,7 +106,7 @@
                     android:minHeight="48dp"
                     android:text="—"
                     android:textSize="16sp"
-                    android:textColor="#333333"
+                    android:textColor="@color/hf_text_body"
                     android:gravity="top" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -113,7 +118,7 @@
             android:layout_height="wrap_content"
             card_view:cardCornerRadius="12dp"
             card_view:cardElevation="4dp"
-            card_view:cardBackgroundColor="#FFFFFF"
+            card_view:cardBackgroundColor="@color/hf_card"
             android:layout_marginBottom="16dp">
 
             <LinearLayout
@@ -128,7 +133,7 @@
                     android:text="SALIN  (Translated)"
                     android:textSize="10sp"
                     android:textStyle="bold"
-                    android:textColor="#888888"
+                    android:textColor="@color/hf_text_label"
                     android:letterSpacing="0.1"
                     android:layout_marginBottom="6dp" />
 
@@ -139,7 +144,7 @@
                     android:minHeight="48dp"
                     android:text="—"
                     android:textSize="16sp"
-                    android:textColor="#333333"
+                    android:textColor="@color/hf_text_body"
                     android:gravity="top" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -151,7 +156,7 @@
             android:layout_height="wrap_content"
             card_view:cardCornerRadius="12dp"
             card_view:cardElevation="4dp"
-            card_view:cardBackgroundColor="#FFFFFF"
+            card_view:cardBackgroundColor="@color/hf_card"
             android:layout_marginBottom="24dp">
 
             <LinearLayout
@@ -166,7 +171,7 @@
                     android:text="DETECTED INTENT"
                     android:textSize="10sp"
                     android:textStyle="bold"
-                    android:textColor="#888888"
+                    android:textColor="@color/hf_text_label"
                     android:letterSpacing="0.1"
                     android:layout_marginBottom="6dp" />
 
@@ -177,13 +182,14 @@
                     android:minHeight="32dp"
                     android:text="—"
                     android:textSize="16sp"
-                    android:textColor="#0066CC"
+                    android:textColor="@color/hf_intent"
                     android:textStyle="bold"
                     android:gravity="top" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Buttons -->
+        <!-- Buttons. wrap_content + minHeight, never a fixed height: a label
+             that wraps to two lines is clipped by a fixed 52dp button. -->
         <Button
             android:id="@+id/start_button"
             android:layout_width="match_parent"
@@ -193,8 +199,8 @@
             android:paddingBottom="12dp"
             android:text="▶  Start Listening"
             android:textSize="15sp"
-            android:backgroundTint="#1A1A2E"
-            android:textColor="#FFFFFF"
+            android:backgroundTint="@color/hf_button_primary_bg"
+            android:textColor="@color/hf_button_primary_text"
             android:layout_marginBottom="10dp" />
 
         <Button
@@ -206,12 +212,10 @@
             android:paddingBottom="12dp"
             android:text="👂 Call sign: OFF"
             android:textSize="14sp"
-            android:backgroundTint="#EEEEEE"
-            android:textColor="#333333"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
             android:layout_marginBottom="10dp" />
 
-        <!-- wrap_content + minHeight, never a fixed height: a label that wraps
-             to two lines is clipped by a fixed 52dp button. -->
         <Button
             android:id="@+id/perm_button"
             android:layout_width="match_parent"
@@ -222,8 +226,8 @@
             android:text="⚙  Accessibility Settings"
             android:textSize="14sp"
             android:lineSpacingExtra="2sp"
-            android:backgroundTint="#EEEEEE"
-            android:textColor="#333333"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
             android:layout_marginBottom="10dp" />
 
         <Button
@@ -236,8 +240,8 @@
             android:text="📜 Narinig, Salin &amp; Intent Log"
             android:textSize="14sp"
             android:lineSpacingExtra="2sp"
-            android:backgroundTint="#E3F2FD"
-            android:textColor="#1565C0"
+            android:backgroundTint="@color/hf_button_accent_bg"
+            android:textColor="@color/hf_button_accent_text"
             android:layout_marginBottom="10dp" />
 
         <Button
@@ -250,8 +254,8 @@
             android:text="📋 Show System Log"
             android:textSize="14sp"
             android:lineSpacingExtra="2sp"
-            android:backgroundTint="#EEEEEE"
-            android:textColor="#333333" />
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text" />
 
         <TextView
             android:layout_width="match_parent"

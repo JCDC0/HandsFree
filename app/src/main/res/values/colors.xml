@@ -7,4 +7,35 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!--
+      Debug UI palette. Every colour used by activity_main.xml and MainActivity
+      lives here, with a dark counterpart in values-night/colors.xml.
+
+      Do not put a raw #hex in the layout or in Kotlin. The screen used to
+      hardcode them, which is why it stayed white on a phone set to dark mode.
+      Add a name here and there, and the system picks the right one.
+    -->
+    <color name="hf_background">#FAFAFA</color>
+    <color name="hf_card">#FFFFFF</color>
+
+    <color name="hf_text_primary">#1A1A2E</color>
+    <color name="hf_text_body">#333333</color>
+    <color name="hf_text_label">#888888</color>
+    <color name="hf_intent">#0066CC</color>
+
+    <color name="hf_button_primary_bg">#1A1A2E</color>
+    <color name="hf_button_primary_text">#FFFFFF</color>
+    <color name="hf_button_neutral_bg">#EEEEEE</color>
+    <color name="hf_button_neutral_text">#333333</color>
+    <color name="hf_button_accent_bg">#E3F2FD</color>
+    <color name="hf_button_accent_text">#1565C0</color>
+
+    <!-- Call-sign toggle when on -->
+    <color name="hf_toggle_on_bg">#C8E6C9</color>
+
+    <!-- Transient status colours set from MainActivity -->
+    <color name="hf_status_active">#1E88E5</color>
+    <color name="hf_status_success">#2E7D32</color>
+    <color name="hf_status_error">#D32F2F</color>
 </resources>
