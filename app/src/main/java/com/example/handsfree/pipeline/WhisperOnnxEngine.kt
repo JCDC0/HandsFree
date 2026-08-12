@@ -142,6 +142,13 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
 
         if (pcm.size < SAMPLE_RATE / 4) return null // under 250 ms — noise, not speech
 
+        var maxAmplitude = 0
+        for (sample in pcm) {
+            val abs = kotlin.math.abs(sample.toInt())
+            if (abs > maxAmplitude) maxAmplitude = abs
+        }
+        Log.i(TAG, "flushAndTranscribe: buffered ${pcm.size} samples, max amplitude = $maxAmplitude")
+
         return try {
             val normalized = FloatArray(pcm.size) { index ->
                 (pcm[index].toFloat() / PCM_SCALE).coerceIn(-1.0f, 1.0f)
@@ -426,21 +433,23 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
         val outputReal = DoubleArray(real.size)
         val outputImaginary = DoubleArray(real.size)
         val outerTwiddle = twiddles(real.size)
-
         for (frequency in 0 until subLength) {
-            for (radixFrequency in 0 until radix) {
+            for (branch in 0 until radix) {
                 var sumReal = 0.0
                 var sumImaginary = 0.0
-                for (branch in 0 until radix) {
-                    val phase = (frequency + subLength * radixFrequency) * branch % real.size
+                for (subBranch in 0 until radix) {
+                    val phase = (frequency + branch * subLength) * subBranch % real.size
                     val c = outerTwiddle.cosine[phase]
                     val s = outerTwiddle.sine[phase]
-                    val valueReal = subTransforms[branch].real[frequency]
-                    val valueImaginary = subTransforms[branch].imaginary[frequency]
-                    sumReal += valueReal * c - valueImaginary * s
-                    sumImaginary += valueReal * s + valueImaginary * c
+                    
+                    val subReal = subTransforms[subBranch].real[frequency]
+                    val subImag = subTransforms[subBranch].imaginary[frequency]
+
+                    sumReal += subReal * c - subImag * s
+                    sumImaginary += subReal * s + subImag * c
                 }
-                val outputIndex = frequency + subLength * radixFrequency
+                
+                val outputIndex = frequency + branch * subLength
                 outputReal[outputIndex] = sumReal
                 outputImaginary[outputIndex] = sumImaginary
             }
@@ -542,8 +551,8 @@ class WhisperOnnxEngine(private val context: Context) : SpeechEngine {
             return Array(N_MELS) { melBin ->
                 FloatArray(N_FFT / 2 + 1) { bin ->
                     val frequency = SAMPLE_RATE * bin.toDouble() / N_FFT
-                    val lower = (melPoints[melBin] - frequency) / differences[melBin]
-                    val upper = (frequency - melPoints[melBin + 2]) / differences[melBin + 1]
+                    val lower = (frequency - melPoints[melBin]) / differences[melBin]
+                    val upper = (melPoints[melBin + 2] - frequency) / differences[melBin + 1]
                     (max(0.0, min(lower, upper)) * 2.0 /
                         (melPoints[melBin + 2] - melPoints[melBin])).toFloat()
                 }

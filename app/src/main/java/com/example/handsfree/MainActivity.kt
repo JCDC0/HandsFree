@@ -212,14 +212,19 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         OverlayService.pipelineListener = this
         updatePermissionStatus()
         
-        if (isSettingUp) {
-            val missing = missingSetup()
-            if (missing.isNotEmpty()) {
+        val missing = missingSetup()
+        if (missing.isNotEmpty()) {
+            if (isSettingUp) {
+                // Already setting up, just advance the guide
                 showSetupGuide(missing)
             } else {
-                isSettingUp = false
-                Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
+                // First launch or user came back after a while, kick off setup
+                isSettingUp = true
+                showSetupGuide(missing)
             }
+        } else if (isSettingUp) {
+            isSettingUp = false
+            Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
         }
     }
 
