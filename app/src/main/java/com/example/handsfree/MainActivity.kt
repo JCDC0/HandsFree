@@ -21,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.service.HandsFreeAccessibilityService
@@ -219,6 +220,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             view.setPadding(view.paddingLeft, bars.top, view.paddingRight, bars.bottom)
             insets
         }
+        // The debug UI is light regardless of the system theme, so the status
+        // bar icons have to be dark or they vanish into the background.
+        WindowCompat.getInsetsController(window, window.decorView)
+            .isAppearanceLightStatusBars = true
 
         installCrashHandler()
 
