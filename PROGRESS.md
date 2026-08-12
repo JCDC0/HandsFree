@@ -121,7 +121,7 @@ Three code-level root causes, none of which the lexicon alone could fix:
 
 **Still out of scope on purpose:** MESSAGING classifies correctly but executes
 nothing. Wiring it (recipient resolution → app choice → compose → send) is the
-fourth feature `CLAUDE.md` §2 rules out before the Aug 14 demo.
+fourth feature `CLAUDE.md` §2 rules out before the Aug 13 demo.
 
 ---
 

@@ -6,5 +6,5 @@
          permissions it is asking for. -->
     <string name="accessibility_service_description">HandsFree lets you control your phone by speaking in Filipino, English, or Taglish. It needs accessibility access to read what is on screen and to tap, swipe, and scroll for you. All speech is processed on your device — nothing is sent to the internet.</string>
 
-    <string name="activator_hint">Hold Volume Down for one second, or tap the floating microphone, to give a command.</string>
+    <string name="activator_hint">Ready. Tap the floating accessibility button, or hold both volume buttons, to give a command.</string>
 </resources>

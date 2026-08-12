@@ -54,15 +54,19 @@ Undergraduate capstone, Holy Angel University, School of Computing.
 
 | Date | Item |
 |---|---|
-| **Aug 13 (Thu)** | Working prototype must exist |
-| **Aug 14 (Fri)** | Demo to adviser — the only day they are available |
+| **Aug 13 (Thu)** | **DEMO TO ADVISER.** Moved up from Friday — confirmed by JC on the night of Aug 12 |
+| Aug 14 (Fri) | Was the demo date. No longer. |
 | **Aug 15 (Sat)** | Adviser files the recommendation form |
 | Aug 27 | Three ring-bound manuscript copies, Dean's Office, 5 PM |
 | Aug 28 | Soft copy + 15-min video via Canvas, 11:59 PM |
 
-The Aug 14 demo is the whole point. The recommendation form depends on the
-adviser seeing something work. **A narrow demo that runs beats a broad one that
-stalls.**
+The **Aug 13 (Thursday)** demo is the whole point. The recommendation form
+depends on the adviser seeing something work. **A narrow demo that runs beats a
+broad one that stalls.**
+
+There is no Friday buffer any more. Everything in this repo was built on
+Wednesday Aug 12, across several AI tools, in about seven hours. The temptation
+on the last night is to add one more thing. Do not. Verify what already exists.
 
 ### Scope is three features. Do not add a fourth.
 
@@ -224,7 +228,7 @@ claim that the deployed model matches the evaluated one.
 Drop the `com.alphacephei:vosk-android` dependency and delete
 `VoskSpeechEngine.kt` and `VoskEngineAdapter.kt`. VOSK is dead weight in the
 APK now, but it is also the only fallback if Whisper misbehaves the morning of
-the demo. Remove it after Aug 14, not before.
+the demo. Remove it after the demo, not before.
 
 ---
 
@@ -290,7 +294,7 @@ ONNX dies natively, that log is the only evidence of where it got to.
 
 ---
 
-## 8. Demo plan for Aug 14
+## 8. Demo plan for Aug 13 (Thursday)
 
 Rehearse this exact sequence. Do not improvise in front of the adviser.
 

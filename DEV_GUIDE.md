@@ -253,7 +253,7 @@ Keep it behind a flag so it can be switched off in the demo build if it misfires
 
 ## 6a. Morphological normalisation — the post-demo structural fix
 
-**Status: specified, not built. Do not build this before Aug 14.**
+**Status: specified, not built. Do not build this before the Aug 13 demo.**
 
 ### The problem, with numbers
 
@@ -366,7 +366,7 @@ behaviour looks.
 
 ### Evidence log — cases that wanted this fix and got a lexicon entry instead
 
-Append to this as it happens. It is the argument for building §6a after Aug 14,
+Append to this as it happens. It is the argument for building §6a after the demo,
 and it doubles as the manuscript's "future work" justification.
 
 | Date | Heard | Should have been | What it demonstrates |
