@@ -41,8 +41,34 @@ let the model finish loading. Activate with the navigation-bar accessibility
 button or the floating bubble.
 
 Speech model: [KarlShane11/handsfree-whisper-tiny-tl](https://huggingface.co/KarlShane11/handsfree-whisper-tiny-tl)
-— whisper-tiny fine-tuned on Filipino/Tagalog, WER 82.72% → 63.15%. The ONNX
-export is bundled locally and gitignored (~40 MB); the APK is ~252 MB.
+— whisper-tiny fine-tuned on Filipino/Tagalog, WER 82.72% → 63.15%.
+
+## The models are NOT in this repo — read this before you build
+
+A fresh clone **will not run**. The app reports the missing file in red on the
+status card, usually `whisper/encoder.onnx`.
+
+| File | Size | In git? |
+|---|---|---|
+| `app/src/main/assets/whisper/decoder.onnx` | 109 MB | ❌ **GitHub rejects any file over 100 MB** |
+| `app/src/main/assets/whisper/encoder.onnx` | 36 MB | ❌ gitignored with it |
+| `app/src/main/assets/whisper/tokens.txt` | 0.8 MB | ❌ gitignored with it |
+| `app/src/main/assets/kws/*.onnx` | 3.6 MB | ✅ committed — small enough |
+
+**If you only want to run the app:** you do not need this repo at all. Ask JC
+for the built APK (~257 MB) and install it:
+
+```bash
+adb install -r app-debug.apk
+```
+
+**If you want to build it:** ask JC for the three `whisper/` files, put them in
+`app/src/main/assets/whisper/`, then `./gradlew installDebug`. Copy them in;
+do not commit them.
+
+Why not Git LFS: it would work, but GitHub's free LFS quota is 1 GB of storage
+and 1 GB/month of bandwidth. A 146 MB checkout burns through that in seven
+clones, and the deadline is not the moment to discover that.
 
 ## Scope
 

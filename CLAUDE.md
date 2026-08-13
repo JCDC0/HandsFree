@@ -237,9 +237,14 @@ the demo. Remove it after the demo, not before.
 - **`canRequestFilterKeyEvents="true"`** must stay in
   `res/xml/accessibility_service_config.xml`. Without it `onKeyEvent` never
   fires and the volume-key activator fails silently, with no error anywhere.
-- **Never bundle ASR models in `assets/` and commit them.** The two VOSK models
-  were 843 MB; no APK builds at that size. Gitignored, unpacked to `filesDir` at
-  runtime. Whisper ONNX at ~40 MB is fine to bundle but stays gitignored.
+- **Never commit the ASR models.** `decoder.onnx` alone is 109 MB and **GitHub
+  hard-rejects any file over 100 MB** — this is a platform limit, not a
+  preference. Whisper's three files total ~146 MB and are gitignored; they are
+  copied in by hand and bundled into the APK at build time. The KWS models
+  (3.6 MB) *are* committed, because they fit.
+- **A fresh clone therefore cannot build a working app.** It compiles, then
+  reports the missing file in red at runtime. Anyone who only needs to *run* it
+  should be given the APK instead of the repo. See README.
 - **Whisper does not stream.** It consumes a padded 30 s window and emits a
   whole transcript. `getPartialResult()` returns `""` by design. Do not try to
   make it emit live partials; the UI shows a listening state instead.
