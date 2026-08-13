@@ -62,9 +62,43 @@ for the built APK (~257 MB) and install it:
 adb install -r app-debug.apk
 ```
 
-**If you want to build it:** ask JC for the three `whisper/` files, put them in
-`app/src/main/assets/whisper/`, then `./gradlew installDebug`. Copy them in;
-do not commit them.
+**If you want to build it:** the models are in the team Drive, under
+`17_Thesis Project/Dataset/onnx_output/`. **They must be renamed as you copy
+them** — the exported names are not the names the app loads:
+
+| In Drive | Copy to `app/src/main/assets/whisper/` |
+|---|---|
+| `handsfree-tl-encoder.onnx` | `encoder.onnx` |
+| `handsfree-tl-decoder.onnx` | `decoder.onnx` |
+| `handsfree-tl-tokens.txt` | `tokens.txt` |
+
+`WhisperOnnxEngine` hardcodes those three names (`ENCODER_FILE`, `DECODER_FILE`,
+`TOKENS_FILE`). Copy without renaming and the app still reports the file missing.
+
+Set `$drive` / `$DRIVE` to wherever the shared folder is on **your** machine —
+the Drive path differs per person — then run one of these from the repo root.
+
+PowerShell:
+
+```powershell
+$drive = "G:\.shortcut-targets-by-id\1nv1KJbiCuhapw__nmPCSaVA0OPN8HB-6\17_Thesis Project\Dataset\onnx_output"
+$dest = "app\src\main\assets\whisper"
+New-Item -ItemType Directory -Force $dest | Out-Null
+Copy-Item "$drive\handsfree-tl-encoder.onnx" "$dest\encoder.onnx"
+Copy-Item "$drive\handsfree-tl-decoder.onnx" "$dest\decoder.onnx"
+Copy-Item "$drive\handsfree-tl-tokens.txt"   "$dest\tokens.txt"
+```
+
+Then `./gradlew installDebug`. Do this once; the files stay gitignored and will
+not be committed by accident.
+
+Sanity check — `app/src/main/assets/whisper/` should hold exactly three files,
+about 36 MB, 109 MB and 0.8 MB. Wrong sizes or wrong names mean a red status
+card at runtime, not a build failure.
+
+`onnx_output` also holds `*.int8.onnx` quantised copies (12 MB and 86 MB).
+**Do not use those** — nothing in this project has been tested against them.
+Trying them is a post-demo experiment, and the APK would shrink by ~48 MB.
 
 Why not Git LFS: it would work, but GitHub's free LFS quota is 1 GB of storage
 and 1 GB/month of bandwidth. A 146 MB checkout burns through that in seven
