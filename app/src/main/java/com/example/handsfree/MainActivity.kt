@@ -197,6 +197,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
      * nothing.
      */
     private fun toggleWakeWord() {
+        // Always-on listening is the last thing that should ever precede the
+        // consent screen. Turning it *off* is never blocked.
+        if (!wakeWordOn && !consented()) { requireConsent(); return }
+
         wakeWordOn = !wakeWordOn
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
             .putBoolean(PREF_WAKE_WORD, wakeWordOn).apply()
@@ -309,6 +313,11 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startButton.setOnClickListener {
             if (pipelineActive) {
                 stopOverlayService()
+            } else if (!consented()) {
+                // Nothing reaches the microphone before consent. Stopping is
+                // always allowed — a consent gate that traps a running mic is
+                // worse than no gate.
+                requireConsent()
             } else if (hasRecordAudioPermission()) {
                 val missing = missingSetup()
                 if (missing.isEmpty()) {
@@ -421,9 +430,17 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
         if (!Copy.isChosen(this)) { showLanguageChooser(); return }
 
-        val missing = missingSetup()
-
-        if (!introAccepted() && !introDeferred && missing.isNotEmpty()) { showIntro(); return }
+        // Consent does NOT depend on which permissions happen to be missing.
+        // It gated on that once, so a tester who had already granted everything
+        // was never asked, and — worse — the consent screen surfaced later,
+        // attached to whatever action next triggered onResume.
+        // A tester who declined is not walked through the permission chain
+        // anyway — the whole flow stops here until they either accept or
+        // uninstall, which is what the consent screen told them.
+        if (!introAccepted()) {
+            if (!introDeferred) showIntro()
+            return
+        }
 
         if (isAccessibilityServiceEnabled() && !howToShown()) {
             markHowToShown()
@@ -431,6 +448,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             return
         }
 
+        val missing = missingSetup()
         if (missing.isNotEmpty()) {
             isSettingUp = true
             showSetupGuide(missing)
@@ -438,6 +456,26 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             isSettingUp = false
             Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * Move to the next onboarding screen from inside the current one's button
+     * handler.
+     *
+     * A plain `advanceOnboarding()` call there does nothing: `AlertDialog`
+     * dismisses *after* the click listener returns, so the guard at the top
+     * still sees the dialog it is being dismissed from and bails. That is what
+     * made the consent screen appear on "Start Listening" instead of straight
+     * after the language choice — it was waiting for the next `onResume`, and
+     * the thing that produced one was the microphone permission prompt.
+     */
+    private fun continueFlow() {
+        flowDialog?.let {
+            it.setOnDismissListener(null)
+            runCatching { it.dismiss() }
+        }
+        flowDialog = null
+        advanceOnboarding()
     }
 
     /** Show [builder], replacing any onboarding dialog already on screen. */
@@ -498,7 +536,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private fun pickLanguage(lang: Copy.Lang) {
         Copy.setLang(this, lang)
         applyLanguage()
-        advanceOnboarding()
+        continueFlow()
     }
 
     /**
@@ -542,7 +580,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                         .putBoolean(PREF_INTRO_ACCEPTED, true).apply()
                     CrashLog.info(this, "consent accepted (lang=${Copy.lang(this).tag})")
-                    advanceOnboarding()
+                    continueFlow()
                 }
                 .setNegativeButton(Copy.get(this, Copy.Key.INTRO_DECLINE)) { _, _ ->
                     // Not persisted: reopening the app is a fresh decision.
@@ -558,6 +596,24 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     private fun introAccepted(): Boolean =
         getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_INTRO_ACCEPTED, false)
+
+    /**
+     * Cleared to use the microphone: a language has been picked *and* the
+     * consent screen has been accepted. `introDeferred` is not consulted —
+     * declining defers the dialog, it does not grant anything.
+     */
+    private fun consented(): Boolean = Copy.isChosen(this) && introAccepted()
+
+    /**
+     * Asking to listen is itself a request to be asked again. Clears the
+     * deferral so a tester who tapped "Hindi muna" and then pressed Start gets
+     * the consent screen back, rather than a permission dialog they never
+     * agreed to reach.
+     */
+    private fun requireConsent() {
+        introDeferred = false
+        advanceOnboarding()
+    }
 
     // ---- step 2: how to operate it ----
 
