@@ -23,6 +23,11 @@
          CALL_ACCEPT had never once executed before this was added. -->
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Read-only. Lets SMART_SEARCH warn the tester that the results page will
+         not load before it hands the URL to the browser. This does NOT grant
+         internet access and the app still opens no socket — see §1 and
+         util/Connectivity.kt. There is deliberately no INTERNET permission. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
@@ -56,6 +61,21 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Offline voice-control overlay for hands-free navigation" />
         </service>
+
+        <!-- Testers hand their logs back through a Google Form, so the export
+             has to leave the app as a real file another app can read. A
+             file:// Uri throws FileUriExposedException on anything modern;
+             FileProvider is the supported route. Scoped to cacheDir/exports
+             only — see res/xml/file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Main launcher activity (settings / onboarding / debug) -->
         <activity

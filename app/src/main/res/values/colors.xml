@@ -34,6 +34,12 @@
     <!-- Call-sign toggle when on -->
     <color name="hf_toggle_on_bg">#C8E6C9</color>
 
+    <!-- Warning banner: the command ran, but something outside the app will
+         spoil the result. Amber, deliberately not the error red — a search with
+         no connection is not a pipeline failure. -->
+    <color name="hf_warning_bg">#FFF4D6</color>
+    <color name="hf_warning_text">#7A5300</color>
+
     <!-- Transient status colours set from MainActivity -->
     <color name="hf_status_active">#1E88E5</color>
     <color name="hf_status_success">#2E7D32</color>

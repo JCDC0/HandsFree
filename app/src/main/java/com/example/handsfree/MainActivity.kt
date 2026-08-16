@@ -14,19 +14,26 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.service.HandsFreeAccessibilityService
 import com.example.handsfree.service.OverlayService
+import com.example.handsfree.util.Copy
 import com.example.handsfree.util.CrashLog
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Main launcher activity for HandsFree.
@@ -51,8 +58,28 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var permButton: Button
     private lateinit var showLogButton: Button
     private lateinit var wakeWordButton: Button
+    private lateinit var exportLogButton: Button
+    private lateinit var howToButton: Button
+    private lateinit var languageButton: Button
+    private lateinit var warningCard: View
+    private lateinit var warningText: TextView
 
     private lateinit var showHistoryButton: Button
+
+    /**
+     * Set when the tester declines the consent screen, so it is not re-shown on
+     * every resume for the rest of the session. Deliberately not persisted —
+     * reopening the app is a fresh decision, and the alternative is an app that
+     * can never be consented to again without clearing its data.
+     */
+    private var introDeferred = false
+
+    /**
+     * The onboarding dialog currently on screen, if any. Returning from the
+     * Settings app fires `onResume`, which can otherwise stack a second dialog
+     * on top of one that never went away.
+     */
+    private var flowDialog: AlertDialog? = null
 
     /**
      * Always-on call-sign listening. Persisted so a tester's choice survives a
@@ -248,10 +275,20 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         showLogButton = findViewById(R.id.show_log_button)
         showHistoryButton = findViewById(R.id.show_history_button)
         wakeWordButton = findViewById(R.id.wake_word_button)
+        exportLogButton = findViewById(R.id.export_log_button)
+        howToButton = findViewById(R.id.how_to_button)
+        languageButton = findViewById(R.id.language_button)
+        warningCard = findViewById(R.id.warning_card)
+        warningText = findViewById(R.id.warning_text)
 
         wakeWordOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_WAKE_WORD, false)
         updateWakeWordButton()
         wakeWordButton.setOnClickListener { toggleWakeWord() }
+
+        exportLogButton.setOnClickListener { confirmExport() }
+        howToButton.setOnClickListener { showHowTo(continueAfter = false) }
+        languageButton.setOnClickListener { toggleLanguage() }
+        updateLanguageButton()
 
         // Load LevenshteinMatcher for intent display in the debug UI
         levenshteinMatcher = runCatching {
@@ -263,7 +300,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         transcribedText.text = "..."
         translatedText.text = "..."
         intentText.text = "—"
-        statusText.text = getString(R.string.activator_hint)
+        statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
         statusText.setTextColor(themed(R.color.hf_text_primary))
         pipelineActive = false
         startButton.text = "Start Listening"
@@ -299,7 +336,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             scrollView.addView(textView)
 
             AlertDialog.Builder(this)
-                .setTitle("Transcript History (Last 50)")
+                .setTitle("Transcript History (Last ${OverlayService.HISTORY_LIMIT})")
                 .setView(scrollView)
                 .setNeutralButton("Copy to Clipboard") { _, _ ->
                     val clipboard = getSystemService(ClipboardManager::class.java)
@@ -365,20 +402,189 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         super.onResume()
         OverlayService.pipelineListener = this
         updatePermissionStatus()
-        
+        advanceOnboarding()
+    }
+
+    /**
+     * One place decides which screen a first-run tester sees, because
+     * `onResume` fires every time they come back from the Settings app and the
+     * steps have to resume mid-flow rather than restart.
+     *
+     * Strict order: language → consent → how-to → remaining permissions. The
+     * how-to is owed the moment the **accessibility service** goes on, not when
+     * every permission is complete — a tester who refuses the Phone permission
+     * would otherwise finish setup having never been told how to talk to the
+     * app at all.
+     */
+    private fun advanceOnboarding() {
+        if (flowDialog?.isShowing == true) return
+
+        if (!Copy.isChosen(this)) { showLanguageChooser(); return }
+
         val missing = missingSetup()
+
+        if (!introAccepted() && !introDeferred && missing.isNotEmpty()) { showIntro(); return }
+
+        if (isAccessibilityServiceEnabled() && !howToShown()) {
+            markHowToShown()
+            showHowTo(continueAfter = true)
+            return
+        }
+
         if (missing.isNotEmpty()) {
-            if (isSettingUp) {
-                // Already setting up, just advance the guide
-                showSetupGuide(missing)
-            } else {
-                // First launch or user came back after a while, kick off setup
-                isSettingUp = true
-                showSetupGuide(missing)
-            }
+            isSettingUp = true
+            showSetupGuide(missing)
         } else if (isSettingUp) {
             isSettingUp = false
             Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Show [builder], replacing any onboarding dialog already on screen. */
+    private fun showFlowDialog(builder: AlertDialog.Builder): AlertDialog {
+        flowDialog?.takeIf { it.isShowing }?.let {
+            // Clear first: a dismiss listener firing mid-replacement would
+            // re-enter advanceOnboarding() before the new dialog is recorded.
+            it.setOnDismissListener(null)
+            runCatching { it.dismiss() }
+        }
+        return builder.show().also { flowDialog = it }
+    }
+
+    /**
+     * A dialog whose body is long enough to need scrolling. Every onboarding
+     * screen here is — the consent text alone does not fit on a phone — and
+     * `AlertDialog.setMessage` truncates rather than scrolls on some OEM skins.
+     */
+    private fun scrollingDialog(title: String, body: String): AlertDialog.Builder {
+        val text = TextView(this).apply {
+            this.text = body
+            textSize = 15f
+            setTextColor(themed(R.color.hf_text_body))
+            setPadding(56, 40, 56, 40)
+            setTextIsSelectable(true)
+            setLineSpacing(0f, 1.15f)
+        }
+        return AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(android.widget.ScrollView(this).apply { addView(text) })
+    }
+
+    // ---- step 0: display language ----
+
+    /**
+     * Asked before anything else, because the consent screen is the first thing
+     * after it and consent nobody could read is not consent.
+     *
+     * Tagalog and English only. The app still hears Taglish — that is what the
+     * lexicon does — but there is no coherent Taglish register to write an
+     * interface in, so it is not offered as a display language. The dialog body
+     * says so in both languages, since a tester who has not chosen yet cannot
+     * be assumed to read either one.
+     */
+    private fun showLanguageChooser() {
+        showFlowDialog(
+            scrollingDialog(getString(R.string.lang_title), getString(R.string.lang_body))
+                .setCancelable(false)
+                .setPositiveButton(getString(R.string.lang_tagalog)) { _, _ ->
+                    pickLanguage(Copy.Lang.TL)
+                }
+                .setNegativeButton(getString(R.string.lang_english)) { _, _ ->
+                    pickLanguage(Copy.Lang.EN)
+                }
+        )
+    }
+
+    private fun pickLanguage(lang: Copy.Lang) {
+        Copy.setLang(this, lang)
+        applyLanguage()
+        advanceOnboarding()
+    }
+
+    /**
+     * Flip the display language from the debug screen. No activity recreation
+     * and no locale switch — see [Copy] for why — so the visible text is
+     * re-read by hand here.
+     */
+    private fun toggleLanguage() {
+        val next = if (Copy.lang(this) == Copy.Lang.TL) Copy.Lang.EN else Copy.Lang.TL
+        Copy.setLang(this, next)
+        applyLanguage()
+        Toast.makeText(this, "🌐 ${next.label}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun applyLanguage() {
+        updateLanguageButton()
+        // Only the hint follows the toggle; the transcript panes hold pipeline
+        // output, which is whatever the tester actually said.
+        val shown = statusText.text.toString()
+        if (shown.isBlank() || shown == "..." || shown.startsWith("Ready") || shown.startsWith("Handa")) {
+            statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
+        }
+    }
+
+    /** Names the language you would switch **to**, not the one you are in. */
+    private fun updateLanguageButton() {
+        val other = if (Copy.lang(this) == Copy.Lang.TL) Copy.Lang.EN else Copy.Lang.TL
+        languageButton.text = "🌐 ${Copy.lang(this).label} → ${other.label}"
+    }
+
+    // ---- step 1: introduction and consent ----
+
+    private fun showIntro() {
+        showFlowDialog(
+            scrollingDialog(
+                Copy.get(this, Copy.Key.INTRO_TITLE),
+                Copy.get(this, Copy.Key.INTRO_BODY)
+            )
+                .setCancelable(false)
+                .setPositiveButton(Copy.get(this, Copy.Key.INTRO_ACCEPT)) { _, _ ->
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(PREF_INTRO_ACCEPTED, true).apply()
+                    CrashLog.info(this, "consent accepted (lang=${Copy.lang(this).tag})")
+                    advanceOnboarding()
+                }
+                .setNegativeButton(Copy.get(this, Copy.Key.INTRO_DECLINE)) { _, _ ->
+                    // Not persisted: reopening the app is a fresh decision.
+                    introDeferred = true
+                    Toast.makeText(
+                        this,
+                        Copy.get(this, Copy.Key.INTRO_DECLINED_TOAST),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+        )
+    }
+
+    private fun introAccepted(): Boolean =
+        getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_INTRO_ACCEPTED, false)
+
+    // ---- step 2: how to operate it ----
+
+    private fun howToShown(): Boolean =
+        getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_HOWTO_SHOWN, false)
+
+    private fun markHowToShown() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(PREF_HOWTO_SHOWN, true).apply()
+    }
+
+    /**
+     * @param continueAfter true when this fired automatically as part of first
+     *        run, so the permission guide picks up where it left off on dismiss.
+     *        False when the tester opened it from the button and is not mid-flow.
+     */
+    private fun showHowTo(continueAfter: Boolean) {
+        val builder = scrollingDialog(
+            Copy.get(this, Copy.Key.HOWTO_TITLE),
+            Copy.get(this, Copy.Key.HOWTO_BODY)
+        ).setPositiveButton(Copy.get(this, Copy.Key.HOWTO_BUTTON), null)
+
+        if (continueAfter) {
+            showFlowDialog(builder.setCancelable(false))
+                .setOnDismissListener { advanceOnboarding() }
+        } else {
+            builder.show()
         }
     }
 
@@ -409,7 +615,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         if (missing.isNotEmpty()) {
             statusText.text = "Missing: ${missing.joinToString()} — grant before starting"
         } else if (statusText.text.toString().startsWith("Missing", ignoreCase = true)) {
-            statusText.text = getString(R.string.activator_hint)
+            statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
         }
     }
 
@@ -494,6 +700,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             when (status) {
                 "PREPARING" -> showLoading("Loading speech model…\nFirst launch copies offline files.")
                 "LISTENING" -> {
+                    // A new utterance starts clean — the last command's warning
+                    // says nothing about this one.
+                    warningCard.visibility = View.GONE
                     hideLoading()
                     startButton.isEnabled = true
                     startButton.text = "Stop Listening"
@@ -507,7 +716,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     startButton.text = "Start Listening"
                     pipelineActive = false
                     statusText.setTextColor(themed(R.color.hf_text_primary))
-                    statusText.text = getString(R.string.activator_hint)
+                    statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
                 }
                 "MODEL_ERROR" -> {
                     hideLoading()
@@ -525,13 +734,23 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
      * the debug UI shows a correct intent while nothing happens on screen,
      * which is indistinguishable from a recognition failure during testing.
      */
-    override fun onCommandExecuted(intent: String, success: Boolean, message: String) {
+    override fun onCommandExecuted(
+        intent: String,
+        success: Boolean,
+        message: String,
+        warning: String?
+    ) {
         runOnUiThread {
             intentText.text = if (success) "$intent — $message" else "$intent — FAILED: $message"
             intentText.setTextColor(
                 themed(if (success) R.color.hf_status_success else R.color.hf_status_error)
             )
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            // Above the cards rather than inside one: the command succeeded, so
+            // nothing in the pipeline panes is wrong and colouring them would
+            // say otherwise.
+            warningCard.visibility = if (warning != null) View.VISIBLE else View.GONE
+            warningText.text = warning.orEmpty()
+            Toast.makeText(this, warning ?: message, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -569,7 +788,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             message.append("• Phone (needed to answer or reject calls by voice)\n")
         }
 
-        AlertDialog.Builder(this)
+        showFlowDialog(
+            AlertDialog.Builder(this)
             .setTitle("Setup Required")
             .setMessage(message.toString().trim())
             .setPositiveButton("Next Step") { _, _ ->
@@ -589,11 +809,131 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                 }
             }
             .setNegativeButton("Cancel") { _, _ -> isSettingUp = false }
+        )
+    }
+
+    // ---- log export ----
+
+    /**
+     * Testers hand their results back through a Google Form, and a form cannot
+     * read app-private storage. The log therefore has to leave the app as a
+     * real file the tester can attach.
+     *
+     * They are told what is in it *before* it is written, not after. The claim
+     * on that screen — command text only, no audio, no personal data — is
+     * exactly what [buildReport] assembles; if you add a field there, change
+     * the copy in `strings.xml` in the same commit.
+     */
+    private fun confirmExport() {
+        if (OverlayService.transcriptHistory.isEmpty()) {
+            Toast.makeText(this, Copy.get(this, Copy.Key.EXPORT_EMPTY), Toast.LENGTH_LONG).show()
+            return
+        }
+        scrollingDialog(
+            Copy.get(this, Copy.Key.EXPORT_TITLE),
+            Copy.get(this, Copy.Key.EXPORT_PRIVACY)
+        )
+            .setPositiveButton(Copy.get(this, Copy.Key.EXPORT_CONFIRM)) { _, _ -> exportLog() }
+            .setNegativeButton(Copy.get(this, Copy.Key.EXPORT_CANCEL), null)
             .show()
+    }
+
+    private fun exportLog() {
+        val file = runCatching { writeReport() }.getOrElse {
+            CrashLog.exception(this, "log export", it)
+            Toast.makeText(this, "Export failed: ${it.message}", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // A file:// Uri throws FileUriExposedException on anything modern, so
+        // the share goes through the FileProvider declared in the manifest.
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "HandsFree tester log — ${file.name}")
+            putExtra(
+                Intent.EXTRA_TEXT,
+                "HandsFree tester log. Command text only — no audio, no personal data."
+            )
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            startActivity(Intent.createChooser(send, Copy.get(this, Copy.Key.EXPORT_CHOOSER)))
+        }.onFailure {
+            Toast.makeText(this, "No app available to share the file", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun writeReport(): File {
+        val dir = File(cacheDir, "exports").apply { mkdirs() }
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val file = File(dir, "handsfree-log-$stamp.txt")
+        file.writeText(buildReport(stamp))
+        return file
+    }
+
+    /**
+     * The exported file. Header first so whoever opens it in the Form response
+     * sheet knows what device produced it and what it is allowed to contain,
+     * then the command history, then the system log.
+     *
+     * Everything here is either something the tester spoke to the app or a
+     * property of the build. No audio, no contacts, no identifiers.
+     */
+    private fun buildReport(stamp: String): String {
+        val version = runCatching {
+            val info = packageManager.getPackageInfo(packageName, 0)
+            "${info.versionName} (${info.longVersionCode})"
+        }.getOrElse { "unknown" }
+
+        val history = OverlayService.transcriptHistory
+        return buildString {
+            appendLine("HandsFree — tester log export")
+            appendLine("=".repeat(60))
+            appendLine("HandsFree: An Offline Hands-Free Android App Using Voice Commands")
+            appendLine("in Filipino, English, and Taglish")
+            appendLine("School of Computing, Holy Angel University")
+            appendLine()
+            appendLine("Exported     : $stamp")
+            appendLine("App version  : $version")
+            appendLine("Device       : ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("Android      : ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+            appendLine("Display lang : ${Copy.lang(this@MainActivity).label}")
+            appendLine("Accessibility: ${if (isAccessibilityServiceEnabled()) "on" else "OFF"}")
+            appendLine("Phone perm   : ${if (hasAnswerCallPermission()) "granted" else "DENIED"}")
+            appendLine("Call sign    : ${if (wakeWordOn) "on" else "off"}")
+            appendLine("Entries      : ${history.size} of ${OverlayService.HISTORY_LIMIT}")
+            appendLine()
+            appendLine("PRIVACY: command text only. No audio is recorded or stored at any")
+            appendLine("point. No names, numbers, contacts, messages, passwords, photos or")
+            appendLine("location. The app holds no INTERNET permission and sends nothing on")
+            appendLine("its own — this file moves only if the tester sends it.")
+            appendLine()
+            appendLine("Narinig = what the app heard   Salin = normalised to English")
+            appendLine("Intent  = the classified command   Result = whether it ran")
+            appendLine()
+            appendLine("-".repeat(60))
+            appendLine("COMMAND HISTORY (newest first)")
+            appendLine("-".repeat(60))
+            appendLine()
+            if (history.isEmpty()) appendLine("(none recorded)")
+            else history.forEach { appendLine(it); appendLine(); appendLine("---"); appendLine() }
+            appendLine("-".repeat(60))
+            appendLine("SYSTEM LOG")
+            appendLine("-".repeat(60))
+            appendLine()
+            appendLine(CrashLog.read(this@MainActivity))
+            appendLine()
+            appendLine("-".repeat(60))
+            appendLine("END OF EXPORT — salamat po! 🙌")
+        }
     }
 
     private companion object {
         const val PREFS = "handsfree_prefs"
         const val PREF_WAKE_WORD = "wake_word_enabled"
+        const val PREF_INTRO_ACCEPTED = "intro_accepted"
+        const val PREF_HOWTO_SHOWN = "howto_shown"
     }
 }

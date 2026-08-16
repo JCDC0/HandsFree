@@ -39,7 +39,14 @@ Undergraduate capstone, Holy Angel University, School of Computing.
 **Three claims the code must never break:**
 
 1. **Offline.** No network calls, anywhere, for any reason. A network call is a
-   defect, not a feature.
+   defect, not a feature. The app holds **no `INTERNET` permission** and cannot
+   acquire one at runtime — that is the claim's hard floor, and it is checkable
+   from the manifest by anyone who doubts it. `ACCESS_NETWORK_STATE` *is*
+   declared (added 2026-08-17): it lets SMART_SEARCH warn the user that a
+   results page will not load. It is read-only, opens no socket and transmits
+   nothing. Handing a URL to the browser is the browser's network call, not
+   ours — say so plainly if a panelist asks, because the URL is visible in
+   `CommandExecutor.SEARCH_URL`.
 2. **Deterministic.** No LLM in the command path. The paper argues explicitly
    against probabilistic GUI agents, citing hallucinated taps as unacceptable in
    assistive technology. A closed intent vocabulary plus Levenshtein matching is
@@ -379,6 +386,16 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
   unverified on this OEM skin
 - Tap-by-name against a real home screen with folders and emoji labels
 
+**Built 2026-08-17 for the tester round, compiled but never run:** the consent
+screen, the how-to screen, the Tagalog/English display toggle, the offline
+warning on SMART_SEARCH, and the log export. `assembleDebug` is green and the
+`FileProvider` and `ACCESS_NETWORK_STATE` entries were confirmed in the merged
+manifest, but no device was connected, so **nothing in that list has been seen
+on a screen.** Before it goes to a tester, someone must install it and walk the
+first-run flow once from a fresh install (`adb uninstall com.example.handsfree`
+first, or the prefs from a previous run skip every screen), and export a log to
+confirm the share sheet appears and the file opens.
+
 **Not wired:** `AppStateMachine.kt` (scaffolded, never instantiated).
 Multi-turn commands hold no context — each utterance is independent.
 
@@ -403,6 +420,61 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-17 — tester round: consent, language toggle, log export
+The build that goes out to testers who are not on the team. Everything here is
+about what a stranger holding the phone sees, understands, and can hand back.
+**Build-verified only — no device was connected.** Nothing below has been run.
+
+- **Offline warning on SMART_SEARCH.** `util/Connectivity.kt` (new) reads
+  `ACCESS_NETWORK_STATE` and reports whether a *validated* internet connection
+  exists. `search()` still hands the URL to the browser when it says no — the
+  check can be wrong, and refusing to act on a wrong check is the worse failure
+  — but `Result` now carries a third field, `warning`, which surfaces as an
+  amber bar above the assistant popup and above the debug cards, and as a
+  `Warning:` line in the transcript log. Deliberately **not** folded into
+  `message`: the command matched and ran, and a reviewer reading the exported
+  log must be able to tell "the network was down" from "the pipeline misheard
+  you". Amber, not the error red, for the same reason.
+- **Transcript log 50 → 75 entries.** A tester working through the command card
+  in `DEV_GUIDE.md` §1 fills 50 before reaching the end of it, and the entries
+  that fall off are the oldest — the first attempt at a phrase, before the
+  tester adapted their pronunciation. Those are the ones worth keeping.
+  `OverlayService.HISTORY_LIMIT` is now the single source; `recordTranscript()`
+  replaces two open-coded trims that had drifted apart.
+- **Log export to a shareable file.** `📤 Export Log for Google Form` writes the
+  history plus the system log to `cacheDir/exports/` and hands it to the share
+  sheet through a `FileProvider` (scoped to that one folder — see
+  `res/xml/file_paths.xml`). The privacy screen is shown *before* the file is
+  written, not after. Its claim — command text only, no audio, no personal data
+  — is exactly what `buildReport()` assembles. **If you add a field there,
+  change the copy in `strings.xml` in the same commit.**
+- **Consent screen before any permission is requested.** Introduces the app, the
+  paper title, all four authors, and the disclaimer: student prototype, may
+  conflict with the phone, we are not liable, decline by uninstalling. Written
+  in the tester's own language, and shown before the permission chain rather
+  than after, because consent obtained after the fact is not consent.
+- **How-to screen the moment the accessibility service goes on** — not when
+  every permission is complete. A tester who refuses the Phone permission would
+  otherwise finish setup having never been told how to talk to the app. Lists
+  the three activation routes and is honest that **"Hey HandsFree" does not
+  work yet** and should not be relied on this round. Re-openable from
+  `❓ Paano gamitin / How to use`.
+- **Display language toggle, Tagalog or English.** Asked once before the consent
+  screen (consent nobody can read is not consent), changeable afterwards from
+  the debug screen, and recorded in the export header so a reviewer knows which
+  wording a tester actually read. `util/Copy.kt` resolves `_tl`/`_en` string
+  pairs by hand rather than using per-app locales — the choice is a research
+  variable, `OverlayService` must render the same copy from a `Service` on
+  minSdk 30 where the AppCompat backport only covers activities, and switching
+  locales recreates the activity mid-consent-dialog. Adding copy means adding a
+  `Copy.Key` with both halves, so a missing translation is a compile error.
+  **Taglish is not offered as a display language** and should not be added: an
+  interface has to pick a register and there is no consistent Taglish one. The
+  chooser says so in both languages. Speaking Taglish is unaffected — that is
+  the lexicon's job, and it does not care what the screen says.
+- `onCommandExecuted` gained a fourth parameter. It is defaulted on the
+  interface, so only `MainActivity`'s override needed touching.
 
 ### 2026-08-12 (night, 4) — "Hey HandsFree" call sign
 Always-on activation, **off by default**, toggled from the debug UI.

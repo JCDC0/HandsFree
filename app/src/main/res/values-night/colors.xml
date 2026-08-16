@@ -25,6 +25,9 @@
 
     <color name="hf_toggle_on_bg">#1F3D24</color>
 
+    <color name="hf_warning_bg">#3A2E10</color>
+    <color name="hf_warning_text">#FFD48A</color>
+
     <color name="hf_status_active">#64B5F6</color>
     <color name="hf_status_success">#81C784</color>
     <color name="hf_status_error">#EF5350</color>

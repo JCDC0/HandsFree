@@ -93,6 +93,7 @@ class OverlayService : Service() {
     private var popupStatusText: TextView? = null
     private var popupTranscriptionText: TextView? = null
     private var popupIntentText: TextView? = null
+    private var popupWarningText: TextView? = null
 
     private val sleepRunnable = Runnable {
         if (listening) {
@@ -106,8 +107,17 @@ class OverlayService : Service() {
         fun onPartialResult(partial: String) {}
         fun onStatusChanged(status: String)
         fun onPipelineError(message: String)
-        /** Result of executing a matched command. */
-        fun onCommandExecuted(intent: String, success: Boolean, message: String) {}
+        /**
+         * Result of executing a matched command. [warning] is non-null when the
+         * command ran but something outside the app will spoil it — today only
+         * a web search with no connection.
+         */
+        fun onCommandExecuted(
+            intent: String,
+            success: Boolean,
+            message: String,
+            warning: String? = null
+        ) {}
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -128,7 +138,7 @@ class OverlayService : Service() {
                 if (content.isNotBlank()) {
                     val entries = content.split("|||")
                     transcriptHistory.clear()
-                    transcriptHistory.addAll(entries)
+                    transcriptHistory.addAll(entries.take(HISTORY_LIMIT))
                 }
             }
         }.onFailure { Log.e(TAG, "Failed to load transcript history", it) }
@@ -421,10 +431,8 @@ class OverlayService : Service() {
             val intentStr = "No match"
             val resultMsg = "No matching command"
             val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: FAILED - $resultMsg"
-            transcriptHistory.add(0, logEntry)
-            if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
-            saveTranscriptHistory()
-            
+            recordTranscript(logEntry)
+
             emitCommand("—", false, resultMsg)
             stopListening("no match")
             scheduleRearm()
@@ -438,14 +446,34 @@ class OverlayService : Service() {
             .getOrElse { CommandExecutor.Result(false, it.message ?: "Execution failed") }
 
         val statusStr = if (result.success) "SUCCESS" else "FAILED"
-        val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: $statusStr - ${result.message}"
-        transcriptHistory.add(0, logEntry)
-        if (transcriptHistory.size > 50) transcriptHistory.removeAt(transcriptHistory.size - 1)
-        saveTranscriptHistory()
+        // The warning is its own line rather than part of Result, so a reviewer
+        // reading the exported log can tell "the command worked, the network
+        // did not" apart from "the pipeline misheard you".
+        val warningLine = result.warning?.let { "\nWarning: $it" }.orEmpty()
+        val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\n" +
+            "Result: $statusStr - ${result.message}$warningLine"
+        recordTranscript(logEntry)
+        if (result.warning != null) {
+            CrashLog.info(this, "$category ran with warning: ${result.warning}")
+        }
 
-        emitCommand(category, result.success, result.message)
+        emitCommand(category, result.success, result.message, result.warning)
         stopListening("command handled")
         scheduleRearm()
+    }
+
+    /**
+     * Newest first, capped at [HISTORY_LIMIT]. Raised from 50 for the tester
+     * round — a tester working through the command card fills 50 entries before
+     * they reach the end of it, and the oldest entries are the ones a reviewer
+     * most wants (the first attempt at a phrase, before the tester adapted).
+     */
+    private fun recordTranscript(entry: String) {
+        transcriptHistory.add(0, entry)
+        while (transcriptHistory.size > HISTORY_LIMIT) {
+            transcriptHistory.removeAt(transcriptHistory.size - 1)
+        }
+        saveTranscriptHistory()
     }
 
     private fun saveTranscriptHistory() {
@@ -546,6 +574,7 @@ class OverlayService : Service() {
             popupStatusText = view.findViewById(R.id.popup_status_text)
             popupTranscriptionText = view.findViewById(R.id.popup_transcription_text)
             popupIntentText = view.findViewById(R.id.popup_intent_text)
+            popupWarningText = view.findViewById(R.id.popup_warning_text)
 
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -570,6 +599,7 @@ class OverlayService : Service() {
             runCatching { windowManager?.removeView(v) }
             popupView = null; popupStatusText = null
             popupTranscriptionText = null; popupIntentText = null
+            popupWarningText = null
         }
     }
 
@@ -592,6 +622,7 @@ class OverlayService : Service() {
                 popupStatusText?.text = "Listening..."
                 popupTranscriptionText?.text = "..."
                 popupIntentText?.visibility = View.GONE
+                popupWarningText?.visibility = View.GONE
             }
             STATUS_KWS_LISTENING -> {
                 // KWS is background/invisible — no popup shown
@@ -604,18 +635,24 @@ class OverlayService : Service() {
             }
         }
     }
-    private fun emitCommand(i: String, ok: Boolean, m: String) {
-        Log.i(TAG, "command $i success=$ok :: $m")
-        mainHandler.post { 
-            pipelineListener?.onCommandExecuted(i, ok, m) 
+    private fun emitCommand(i: String, ok: Boolean, m: String, warning: String? = null) {
+        Log.i(TAG, "command $i success=$ok :: $m${warning?.let { " :: WARN $it" }.orEmpty()}")
+        mainHandler.post {
+            pipelineListener?.onCommandExecuted(i, ok, m, warning)
             popupIntentText?.visibility = View.VISIBLE
             popupIntentText?.text = if (ok) "$i — $m" else "$i — FAILED: $m"
             popupIntentText?.setTextColor(if (ok) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#E57373"))
-            
-            // Auto-hide popup after 3 seconds of showing the result
-            mainHandler.postDelayed({ hideAssistantPopup() }, 3000)
+
+            popupWarningText?.visibility = if (warning != null) View.VISIBLE else View.GONE
+            popupWarningText?.text = warning
+
+            // Auto-hide popup after showing the result. A warning is longer than
+            // the result line and is the thing the tester most needs to read, so
+            // it earns more time on screen.
+            val linger = if (warning != null) WARNING_LINGER_MS else RESULT_LINGER_MS
+            mainHandler.postDelayed({ hideAssistantPopup() }, linger)
         }
-        runCatching { startForegroundCompat(buildNotification(m)) }
+        runCatching { startForegroundCompat(buildNotification(warning ?: m)) }
     }
 
     private fun emitError(message: String) {
@@ -714,6 +751,17 @@ class OverlayService : Service() {
 
         /** How long the mic stays open after activation. */
         private const val LISTEN_WINDOW_MS = 8000L
+
+        /**
+         * Entries kept in the transcript log, newest first. Every one is a few
+         * hundred bytes and the whole file is rewritten on each command, so the
+         * cost of raising this is a rewrite of ~30 KB per utterance.
+         */
+        const val HISTORY_LIMIT = 75
+
+        /** How long the result popup stays on screen once the command has run. */
+        private const val RESULT_LINGER_MS = 3000L
+        private const val WARNING_LINGER_MS = 6000L
 
         /**
          * Pause between an utterance being handled and the next capture in

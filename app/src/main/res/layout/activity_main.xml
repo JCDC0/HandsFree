@@ -36,6 +36,32 @@
             android:gravity="center"
             android:layout_marginBottom="20dp" />
 
+        <!-- Warning banner. Sits above the status card so it is the first thing
+             read, and is hidden unless a command ran into something outside the
+             app's control — today only a web search with no connection. Amber,
+             not the error red: the pipeline did its job. -->
+        <androidx.cardview.widget.CardView
+            xmlns:card_view="http://schemas.android.com/apk/res-auto"
+            android:id="@+id/warning_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            card_view:cardCornerRadius="12dp"
+            card_view:cardElevation="2dp"
+            card_view:cardBackgroundColor="@color/hf_warning_bg"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:id="@+id/warning_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="14dp"
+                android:text=""
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/hf_warning_text" />
+        </androidx.cardview.widget.CardView>
+
         <!-- Status Card -->
         <androidx.cardview.widget.CardView
             xmlns:card_view="http://schemas.android.com/apk/res-auto"
@@ -252,6 +278,53 @@
             android:paddingTop="12dp"
             android:paddingBottom="12dp"
             android:text="📋 Show System Log"
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
+            android:layout_marginBottom="10dp" />
+
+        <!-- The tester's route back to us: writes the log to a file and hands it
+             to the share sheet, for the Google Form. Accent-coloured because on
+             a testing build it is the second most important button here. -->
+        <Button
+            android:id="@+id/export_log_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="📤 Export Log for Google Form"
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_accent_bg"
+            android:textColor="@color/hf_button_accent_text"
+            android:layout_marginBottom="10dp" />
+
+        <Button
+            android:id="@+id/how_to_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="❓ Paano gamitin / How to use"
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
+            android:layout_marginBottom="10dp" />
+
+        <!-- Label is set from Kotlin — it names the language you would switch
+             TO, so hardcoding either half here would be wrong half the time. -->
+        <Button
+            android:id="@+id/language_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="🌐 Wika / Language"
             android:textSize="14sp"
             android:lineSpacingExtra="2sp"
             android:backgroundTint="@color/hf_button_neutral_bg"

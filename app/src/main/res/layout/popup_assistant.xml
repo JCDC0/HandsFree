@@ -7,6 +7,26 @@
     android:padding="20dp"
     android:elevation="8dp">
 
+    <!--
+      Warning bar, above everything else in the box so it is the first thing
+      read. Hidden unless a command ran into something outside the app's control
+      (today: a web search with no connection). Colours are literal here, unlike
+      activity_main.xml, because this popup is always drawn on the same dark
+      panel regardless of the system theme.
+    -->
+    <TextView
+        android:id="@+id/popup_warning_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:background="@drawable/bg_warning"
+        android:padding="10dp"
+        android:text=""
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="#FFD48A"
+        android:layout_marginBottom="10dp" />
+
     <TextView
         android:id="@+id/popup_status_text"
         android:layout_width="match_parent"

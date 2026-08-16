@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the export folder is shared, and only through FileProvider. The rest of
+  filesDir holds crash.log and transcript.log, which the export deliberately
+  copies (filtered and headed) rather than exposing directly.
+-->
+<paths>
+    <cache-path name="exports" path="exports/" />
+</paths>

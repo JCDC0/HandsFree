@@ -11,6 +11,7 @@ import android.telecom.TelecomManager
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.handsfree.service.HandsFreeAccessibilityService
+import com.example.handsfree.util.Connectivity
 
 /**
  * Turns a classified intent into a real action on the device.
@@ -31,8 +32,21 @@ class CommandExecutor(
     private val nodeLocator: DfsNodeLocator = DfsNodeLocator()
 ) {
 
-    /** Outcome of an execution attempt, surfaced to the UI. */
-    data class Result(val success: Boolean, val message: String)
+    /**
+     * Outcome of an execution attempt, surfaced to the UI.
+     *
+     * [warning] is a separate channel from [message] on purpose: it describes a
+     * condition outside the app's control that will spoil the result (today,
+     * only "no internet" on a web search). It is not a failure — the command
+     * matched and ran — so folding it into [message] would make the transcript
+     * log read as a recognition problem when the pipeline did its job.
+     * Defaulted, so no existing construction site changes.
+     */
+    data class Result(
+        val success: Boolean,
+        val message: String,
+        val warning: String? = null
+    )
 
     /**
      * Execute [intentCategory] with the full normalised utterance as context.
@@ -342,9 +356,20 @@ class CommandExecutor(
      * call, it hands a URL to the browser. Transcription, translation and intent
      * matching remain entirely on-device — a web search is a network action by
      * definition and always was.
+     *
+     * SMART_SEARCH is the one intent that needs a connection, so it is the one
+     * intent that checks. The search is still handed to the browser when the
+     * device is offline — the check can be wrong, and refusing to act on it
+     * would be a worse failure than a browser error page — but the tester is
+     * told why the page is blank, and the transcript log records it so a
+     * reviewer does not read the entry as a recognition failure.
      */
     private fun search(query: String): Result {
         if (query.isBlank()) return Result(false, "No search query heard")
+
+        val warning =
+            if (Connectivity.hasInternet(context)) null else OFFLINE_WARNING
+        if (warning != null) Log.w(TAG, "SMART_SEARCH with no internet: \"$query\"")
 
         val results = Intent(
             Intent.ACTION_VIEW,
@@ -353,7 +378,7 @@ class CommandExecutor(
 
         try {
             context.startActivity(results)
-            return Result(true, "Searching for \"$query\"")
+            return Result(true, "Searching for \"$query\"", warning)
         } catch (t: Throwable) {
             Log.w(TAG, "no browser for a results URL, falling back to ACTION_WEB_SEARCH", t)
         }
@@ -364,9 +389,9 @@ class CommandExecutor(
         }
         return try {
             context.startActivity(webSearch)
-            Result(true, "Searching for \"$query\"")
+            Result(true, "Searching for \"$query\"", warning)
         } catch (t: Throwable) {
-            Result(false, "No search app available")
+            Result(false, "No search app available", warning)
         }
     }
 
@@ -492,6 +517,15 @@ class CommandExecutor(
 
         /** Results-page prefix. The query is appended URL-encoded. */
         private const val SEARCH_URL = "https://www.google.com/search?q="
+
+        /**
+         * Shown to the tester and written to the transcript log when a search
+         * runs with no connection. Bilingual because the testers are, and
+         * because whoever reads the exported log may not be.
+         */
+        const val OFFLINE_WARNING =
+            "Walang internet — hindi mag-lo-load ang hinanap. " +
+                "(No internet connection: the search results will not load.)"
 
         /** Intents that can still do something useful with the service off. */
         private val NO_A11Y_REQUIRED = setOf("APP_LAUNCH", "SCHEDULING", "CALL_ACCEPT")

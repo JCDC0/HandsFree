@@ -3,8 +3,86 @@
 
     <!-- Shown in Settings > Accessibility > HandsFree. Android requires this
          to explain, in the user's own terms, why the service needs the
-         permissions it is asking for. -->
+         permissions it is asking for. Not part of the in-app language toggle:
+         this string is rendered by the system Settings app, not by us. -->
     <string name="accessibility_service_description">HandsFree lets you control your phone by speaking in Filipino, English, or Taglish. It needs accessibility access to read what is on screen and to tap, swipe, and scroll for you. All speech is processed on your device — nothing is sent to the internet.</string>
 
+    <!--
+      ==================================================================
+      Tester-facing copy, in Tagalog (_tl) and English (_en) pairs.
+      ==================================================================
+
+      Resolved at runtime by util/Copy.kt from the tester's own choice, NOT
+      from the device locale and NOT through per-app locales. Two reasons:
+      the choice is a research variable we want recorded in the exported log,
+      and OverlayService has to render the same copy from a Service on
+      minSdk 30, where the AppCompat locale backport only covers activities.
+      Explicit pairs behave identically everywhere.
+
+      Tagalog and English are the only two DISPLAY languages. The app still
+      understands Taglish commands — that is what the lexicon is for — but
+      "Taglish" is not offered as an interface language, because there is no
+      such thing as a consistent Taglish register to write an interface in.
+
+      Android collapses real newlines in a resource string, so every line
+      break is an explicit \n; apostrophes and double quotes stay escaped.
+
+      Four screens, in the order a first-time tester meets them:
+        0. lang_*    — the very first thing shown, before anything else
+        1. intro_*   — before any permission is requested (consent)
+        2. howto_*   — the moment the accessibility service goes on
+        3. export_*  — before a log leaves the phone
+    -->
+
+    <string name="lang_title">Wika / Language</string>
+    <string name="lang_body">Anong wika ang gusto ninyong gamitin ng app?\n\nWhich language should the app use?\n\n\nAng pagpipiliang ito ay para lang sa MGA NABABASA sa app.\n\nThis choice only affects what you READ.\n\nKahit alin ang piliin ninyo, kaya pa rin ng app na makinig sa Tagalog, English, at Taglish — puwede kayong mag-utos ng \"buksan mo ang YouTube\" kahit English ang display.\n\nEither way you can still speak Tagalog, English, or a mix. The language you pick here does not change what the app can hear.\n\n\nPuwede ninyo itong palitan kahit kailan sa loob ng app.\nYou can change this later inside the app.</string>
+    <string name="lang_tagalog">Tagalog</string>
+    <string name="lang_english">English</string>
+
+    <string name="intro_title_tl">Kumusta! Salamat sa pagsubok 🙌</string>
+    <string name="intro_title_en">Hello, and thank you for testing 🙌</string>
+
+    <string name="intro_body_tl">ANO ANG HANDSFREE?\n\nIsang app na kaya mong utusan gamit ang boses mo — sa Tagalog, English, o Taglish. Sabihin mo lang kung ano ang gusto mong gawin ng phone mo, tulad ng \"buksan mo ang YouTube\" o \"bumalik\", at gagawin niya ito para sa iyo.\n\nGinawa ito para sa mga taong mahirap gamitin ang touchscreen — may hawak na ibang bagay, may kapansanan sa kamay, o simpleng hindi kaya sa ngayon.\n\nLahat ng pakikinig at pag-unawa ay nangyayari SA LOOB mismo ng phone ninyo. Walang recording na umaalis sa device.\n\n\nANG PAG-AARAL\n\n\"HandsFree: An Offline Hands-Free Android App Using Voice Commands in Filipino, English, and Taglish\"\n\nIsang thesis para sa Bachelor of Science in Computer Science, School of Computing, Holy Angel University.\n\nGinawa nina:\n• Eriel Ben Baguio\n• John Harold Doton\n• Juan Carlo De Castro\n• Karl Shane Bernarte\n\n\nMARAMING SALAMAT PO\n\nMalaking tulong ang oras ninyo. Bawat command na susubukan ninyo — lalo na ang mga hindi gumana — ay tumutulong para matutunan ng app ang totoong paraan ng pagsasalita ng mga Pilipino. Ang mali ang mas kailangan namin kaysa sa tama.\n\n\nSUSUNOD: MGA PERMISSION\n\nHihingi ang app ng ilang permission:\n• Mikropono — para marinig ang utos ninyo\n• Display over other apps — para sa floating button\n• Accessibility — para ma-tap at ma-scroll para sa inyo\n• Telepono — para masagot ang tawag kapag inutos ninyo\n\n\nPAHINTULOT AT PAALALA\n\nSa pagpindot ng \"Sige, tuloy\" ay pumapayag kayo na:\n\n• Boluntaryo ang paglahok ninyo. Puwede kayong tumigil kahit kailan.\n• Prototype pa lamang ito para sa isang thesis, hindi pa tapos na produkto. Maaari itong magkamali, mag-crash, o mag-conflict sa ibang settings ng phone ninyo.\n• Hindi kami mananagutan sa anumang problema o pinsala sa device na maidulot ng app na ito. Kayo ang may pasya kung ipagpapatuloy.\n\nKung ayaw ninyong sumali, walang problema at hindi kayo obligado. I-uninstall lang ang app at wala nang mangyayari — walang matitira, walang maipapadala. Maraming salamat pa rin sa oras ninyo. 🙌</string>
+
+    <string name="intro_body_en">WHAT IS HANDSFREE?\n\nAn app you control by speaking — in Tagalog, English, or a mix of both. Say what you want your phone to do, like \"buksan mo ang YouTube\" or \"go back\", and it does it for you.\n\nIt was built for people who cannot easily use a touchscreen: hands full, a hand injury or disability, or simply not free at that moment.\n\nAll the listening and understanding happens INSIDE your phone. No recording ever leaves the device.\n\n\nTHE STUDY\n\n\"HandsFree: An Offline Hands-Free Android App Using Voice Commands in Filipino, English, and Taglish\"\n\nA thesis submitted for the degree of Bachelor of Science in Computer Science, School of Computing, Holy Angel University.\n\nBy:\n• Eriel Ben Baguio\n• John Harold Doton\n• Juan Carlo De Castro\n• Karl Shane Bernarte\n\n\nTHANK YOU\n\nYour time genuinely helps. Every command you try — especially the ones that fail — teaches the app how Filipinos actually speak. The failures are worth more to us than the successes.\n\n\nNEXT: PERMISSIONS\n\nThe app will ask for a few permissions:\n• Microphone — to hear your commands\n• Display over other apps — for the floating button\n• Accessibility — to tap and scroll on your behalf\n• Phone — to answer a call when you ask it to\n\n\nCONSENT AND DISCLAIMER\n\nBy tapping \"Continue\" you agree that:\n\n• Your participation is voluntary. You may stop at any time.\n• This is a student prototype, not a finished product. It can misbehave, crash, or conflict with other settings on your phone.\n• We are not liable for any problem or damage to your device caused by this app. Continuing is your decision.\n\nIf you would rather not take part, that is completely fine and you are under no obligation. Just uninstall the app and nothing further happens — nothing is kept, nothing is sent. Thank you for your time either way. 🙌</string>
+
+    <string name="intro_accept_tl">Sige, tuloy</string>
+    <string name="intro_accept_en">Continue</string>
+    <string name="intro_decline_tl">Hindi muna</string>
+    <string name="intro_decline_en">Not now</string>
+    <string name="intro_declined_toast_tl">Walang problema. Salamat po sa oras ninyo — i-uninstall lang ang app kung ayaw na ninyong ituloy. 🙌</string>
+    <string name="intro_declined_toast_en">No problem at all. Thank you for your time — just uninstall the app if you would rather not continue. 🙌</string>
+
+    <string name="howto_title_tl">Ready na! Paano gamitin 🙌</string>
+    <string name="howto_title_en">You are set up. How to use it 🙌</string>
+
+    <string name="howto_body_tl">Naka-on na ang accessibility service. Ito ang tatlong paraan para pakinggan kayo ng app.\n\n\n1. ACCESSIBILITY BUTTON  ← ito ang pinaka-sigurado\n\nI-tap ang floating accessibility button — iyong maliit na icon sa gilid o sa ibaba ng screen, parang sa iPad. Nandiyan siya kahit anong app ang bukas.\n\n\n2. DALAWANG VOLUME KEYS\n\nPindutin nang sabay ang volume up at volume down, tapos hawakan ng mga 3 segundo.\n\nDepende ito sa phone. May mga brand na kinukuha ang volume keys para sa sarili nila, kaya kung walang mangyari, hindi kayo ang may mali — gamitin na lang ang unang paraan at sabihin ninyo sa amin kung anong phone ang gamit ninyo.\n\n\n3. \"HEY HANDSFREE\"  ← HINDI PA GUMAGANA\n\nSinusubukan pa namin ito. Huwag muna itong asahan ngayong testing — kung may makita kayong toggle para dito sa app, puwede ninyong subukan, pero normal lang na walang mangyari.\n\n\nPAGKATAPOS MAG-ACTIVATE\n\nMay lalabas na maliit na kahon sa ibaba ng screen. Doon kayo magsalita, nang normal lang at hindi masyadong mabilis. Isang utos bawat activation.\n\n\nMGA HALIMBAWA\n\n• \"Buksan mo ang YouTube\"\n• \"Pakibuksan ang Facebook\"\n• \"Bumalik\" o \"Balik\"\n• \"Pumunta sa home screen\"\n• \"Mag scroll pababa\"\n• \"Scroll pataas\"\n• \"Pindutin ang Calendar\"\n• \"Hanapin ang adobo recipe\"\n• \"Sagutin\" — kapag may tumatawag\n\nPuwede rin sa English, o halo-halo. Walang internet na kailangan maliban sa paghahanap sa web.\n\n\nKUNG WALANG NANGYARI\n\nHuwag mag-alala at huwag burahin — iyon mismo ang data na kailangan namin. Buksan lang ang app at i-tap ang \"Narinig, Salin at Intent Log\" para makita kung ano talaga ang narinig ng app. Kapag tapos na kayo, i-export ninyo ito at ipasa sa Google Form.</string>
+
+    <string name="howto_body_en">The accessibility service is on. There are three ways to get the app listening.\n\n\n1. ACCESSIBILITY BUTTON  ← the reliable one\n\nTap the floating accessibility button — the small icon at the edge or bottom of the screen, like the one on an iPad. It is there whatever app you are in.\n\n\n2. BOTH VOLUME KEYS\n\nPress volume up and volume down together and hold for about 3 seconds.\n\nThis depends on the phone. Some brands keep the volume keys for themselves, so if nothing happens it is not your fault — use the first method instead, and tell us which phone you have.\n\n\n3. \"HEY HANDSFREE\"  ← NOT WORKING YET\n\nStill being built. Please do not rely on it in this test round. If you find a toggle for it in the app you are welcome to try, but nothing happening is the expected result.\n\n\nAFTER YOU ACTIVATE\n\nA small box appears at the bottom of the screen. Speak then — normally, not too fast. One command per activation.\n\n\nEXAMPLES\n\n• \"Buksan mo ang YouTube\"\n• \"Pakibuksan ang Facebook\"\n• \"Bumalik\" or \"Go back\"\n• \"Go to the home screen\"\n• \"Scroll down\"\n• \"Scroll up\"\n• \"Press Calendar\"\n• \"Search for adobo recipe\"\n• \"Sagutin\" or \"Answer\" — when a call comes in\n\nTagalog, English or a mix all work. No internet is needed except for a web search.\n\n\nIF NOTHING HAPPENS\n\nDo not worry and do not delete it — that is exactly the data we need. Open the app and tap \"Narinig, Salin and Intent Log\" to see what the app actually heard. When you are done, export it and send it through the Google Form.</string>
+
+    <string name="howto_button_tl">Nakuha ko</string>
+    <string name="howto_button_en">Got it</string>
+
+    <string name="export_title_tl">I-export ang log</string>
+    <string name="export_title_en">Export the log</string>
+
+    <string name="export_privacy_tl">Gagawa ito ng isang text file na kayo mismo ang magpapasa sa Google Form o kahit saan ninyo gusto.\n\n\nANO ANG NASA LOOB\n\n• Ang mga utos na sinabi ninyo — bilang TEKSTO lang: ang narinig ng app, ang salin nito, ang na-detect na intent, at kung gumana ba.\n• Modelo ng phone, bersyon ng Android, at bersyon ng app.\n• Ang system log ng app para sa mga error.\n\n\nANO ANG WALA\n\n• WALANG audio. Hindi nase-save ang boses ninyo kahit saan — nawawala agad ito pagkatapos i-transcribe.\n• Walang pangalan, numero, contacts, message, password, larawan, o location.\n• Walang awtomatikong ipinapadala. Ang app na ito ay hindi kayang mag-internet; kayo ang magpapasa nito, sa kung kanino ninyo gusto.\n\n\nPara lang ito sa pagpapaganda ng lexicon — ang listahan kung paano naiintindihan ng app ang salitang Filipino.\n\nMabuting basahin muna ninyo ang file bago ipasa. Kayo ang may huling desisyon.</string>
+
+    <string name="export_privacy_en">This creates a text file that you send yourself, through the Google Form or anywhere else you choose.\n\n\nWHAT IS IN IT\n\n• The commands you spoke — as TEXT only: what the app heard, how it translated that, which intent it detected, and whether it worked.\n• Your phone model, Android version, and app version.\n• The app system log, for errors.\n\n\nWHAT IS NOT IN IT\n\n• NO audio. Your voice is never saved anywhere — it is discarded the moment it has been transcribed.\n• No names, numbers, contacts, messages, passwords, photos, or location.\n• Nothing is sent automatically. This app cannot reach the internet at all; you send the file, to whoever you choose.\n\n\nIt is used only to improve the lexicon — the list of how the app understands Filipino words.\n\nYou are welcome to read the file before sending it. The decision is yours.</string>
+
+    <string name="export_confirm_tl">I-export</string>
+    <string name="export_confirm_en">Export</string>
+    <string name="export_cancel_tl">Hindi muna</string>
+    <string name="export_cancel_en">Not now</string>
+    <string name="export_chooser_tl">Ipasa ang log</string>
+    <string name="export_chooser_en">Send the log</string>
+    <string name="export_empty_tl">Wala pang command na na-record. Subukan muna ang ilang utos bago mag-export.</string>
+    <string name="export_empty_en">No commands recorded yet. Try a few commands before exporting.</string>
+
+    <string name="activator_hint_tl">Handa na. Gamitin ang accessibility shortcut — i-tap ang floating accessibility button, o pindutin nang sabay ang dalawang volume keys ng 3 segundo — para mag-utos.</string>
+    <string name="activator_hint_en">Ready. Use the accessibility shortcut — tap the floating accessibility button, or hold both volume keys for 3 seconds — to give a command.</string>
+
+    <!-- Kept under its original name: OverlayService and older code paths still
+         reference it, and it is the English text verbatim. -->
     <string name="activator_hint">Ready. Use the accessibility shortcut — tap the floating accessibility button, or hold both volume keys for 3 seconds — to give a command.</string>
 </resources>

@@ -8,9 +8,38 @@
 > The bottleneck is the **lexicon**, not the model. Bring voice-test logs, add
 > the garble to `app/src/main/assets/translation-lexicon.json`, rebuild.
 
-**Last updated:** 2026-08-12 night PHT
-**Build status:** GREEN — `assembleDebug` + `installDebug` on device
-144512558D105352. An APK with all of the below is installed and running.
+**Last updated:** 2026-08-17
+**Build status:** `assembleDebug` GREEN. **Not installed.** No device was
+connected when the tester-round work below was built, so the last APK that
+actually ran on hardware is the 2026-08-12 night build.
+
+---
+
+## Tester round (2026-08-17) — built, compiled, never run
+
+Five things were added for testers outside the team. All five compile; none has
+been seen on a screen. Details and rationale: `CLAUDE.md` CHANGELOG.
+
+| Added | Code | Seen working? |
+|---|---|---|
+| Consent screen before the permission chain | ✅ | ❌ |
+| How-to screen when accessibility goes on | ✅ | ❌ |
+| Tagalog / English display toggle | ✅ | ❌ |
+| Offline warning on SMART_SEARCH | ✅ | ❌ |
+| Log export → share sheet (Google Form) | ✅ | ❌ |
+
+**Before this goes to a single tester, someone must:**
+
+1. `adb uninstall com.example.handsfree` then `./gradlew installDebug`. A
+   fresh install is not optional — the language, consent and how-to screens are
+   each gated on a SharedPreference, so on an upgraded install every one of
+   them is skipped and the flow is untested.
+2. Walk the whole first run: language → consent → permissions → how-to.
+3. Turn Wi-Fi and mobile data off, say "hanapin ang adobo recipe", and confirm
+   the amber warning appears on both the floating popup and the debug screen.
+4. Speak a few commands, tap **Export Log for Google Form**, and confirm the
+   share sheet opens and the resulting `.txt` is readable. A `FileProvider`
+   misconfiguration throws at share time, not at build time.
 
 ---
 
