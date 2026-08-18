@@ -266,6 +266,18 @@ the demo. Remove it after the demo, not before.
   so never report success from the fact that it did not throw. Check the
   permission first. The node-click fallback exists for when it is refused; keep
   it.
+- **The applicationId is `ph.edu.hau.handsfree`; the Kotlin package is still
+  `com.example.handsfree`.** They are different things and were deliberately
+  split in 1.1-tester1: `applicationId` is the identity Android installs under,
+  `namespace` is where `R` and `BuildConfig` are generated. Renaming the source
+  package is a large diff with nothing to show for it. Do not "tidy" this.
+- **Installing 1.1-tester1 needs the old build uninstalled first.** The
+  applicationId change makes it a *different app* to Android — it will not
+  upgrade over `com.example.handsfree`, it installs alongside it, and you then
+  have two HandsFree icons, two accessibility entries and a tester reporting
+  against whichever one they happened to open. `adb uninstall
+  com.example.handsfree` before installing, on every device that has ever run
+  a pre-1.1 build.
 - **A ringing call is a heads-up notification in its own window.**
   `rootInActiveWindow` does not contain it — it returns whatever the user was
   looking at, often our own overlay. Use `getAllRoots()` for anything that
@@ -386,15 +398,22 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
   unverified on this OEM skin
 - Tap-by-name against a real home screen with folders and emoji labels
 
+**Build identity (2026-08-18):** `versionName 1.1-tester1`, `versionCode 2`,
+`applicationId ph.edu.hau.handsfree`. The exported tester log now carries a
+`Build:` line with the git short SHA, so a report can be traced to a commit.
+**This build will not upgrade over an older install** — uninstall
+`com.example.handsfree` first, on every device. See §6.
+
 **Built 2026-08-17 for the tester round, compiled but never run:** the consent
 screen, the how-to screen, the Tagalog/English display toggle, the offline
 warning on SMART_SEARCH, and the log export. `assembleDebug` is green and the
 `FileProvider` and `ACCESS_NETWORK_STATE` entries were confirmed in the merged
 manifest, but no device was connected, so **nothing in that list has been seen
 on a screen.** Before it goes to a tester, someone must install it and walk the
-first-run flow once from a fresh install (`adb uninstall com.example.handsfree`
+first-run flow once from a fresh install (`adb uninstall ph.edu.hau.handsfree`
 first, or the prefs from a previous run skip every screen), and export a log to
-confirm the share sheet appears and the file opens.
+confirm the share sheet appears and the file opens. On a phone that still has a
+pre-1.1 build, the old id has to go too: `adb uninstall com.example.handsfree`.
 
 **Not wired:** `AppStateMachine.kt` (scaffolded, never instantiated).
 Multi-turn commands hold no context — each utterance is independent.
@@ -420,6 +439,34 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-18 — build identity for the tester round
+Build config only. No feature, pipeline, lexicon or UI change.
+- **`versionName` 1.0 → `1.1-tester1`, `versionCode` 1 → 2.** Every build ever
+  shipped reported "1.0", so a tester's bug report could not be tied to a build.
+- **`BuildConfig.BUILD_STAMP` and `BUILD_DATE`**, read from git at configure
+  time and printed in the exported log's header next to `App version`. The SHA
+  is the part that matters — `versionName` is human-facing and will be forgotten
+  at the next build; the SHA maps a log back to an exact commit with nobody
+  having to remember anything. A `-dirty` suffix is appended when the working
+  tree has uncommitted changes, because a SHA printed next to modified sources
+  is a lie by omission. Falls back to `nogit` so a fresh clone with no `.git`
+  still builds. `buildFeatures { buildConfig = true }` had to be turned on —
+  AGP 8+ generates no `BuildConfig` without it, so the fields would silently
+  not exist.
+- **`applicationId` `com.example.handsfree` → `ph.edu.hau.handsfree`**, off the
+  Android Studio template default before the app reaches 15–20 outsiders. The
+  `FileProvider` authority is `${applicationId}.fileprovider` and followed on
+  its own; verified as `ph.edu.hau.handsfree.fileprovider` in the merged
+  manifest rather than hardcoded.
+- **The Kotlin source package is unchanged** and stays `com.example.handsfree`.
+  `namespace` and `applicationId` are independent; renaming the package is a
+  large risky diff eight days from submission and buys nothing. See §6.
+- `ExampleInstrumentedTest` asserted the old applicationId against
+  `context.packageName` and would now fail. Updated — it is `androidTest`, so it
+  never ran in `assembleDebug` and cannot affect the APK either way.
+- Installing over a pre-1.1 build does not upgrade it, it installs a second app.
+  Uninstall first; noted in §6, §9 and `PROGRESS.md`.
 
 ### 2026-08-17 — tester round: consent, language toggle, log export
 The build that goes out to testers who are not on the team. Everything here is

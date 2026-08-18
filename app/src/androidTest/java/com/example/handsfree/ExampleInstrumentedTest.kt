@@ -19,6 +19,8 @@ class ExampleInstrumentedTest {
     fun useAppContext() {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("com.example.handsfree", appContext.packageName)
+        // The applicationId, NOT the Kotlin package this file lives in.
+        // They diverged deliberately in 1.1-tester1 — see app/build.gradle.kts.
+        assertEquals("ph.edu.hau.handsfree", appContext.packageName)
     }
 }

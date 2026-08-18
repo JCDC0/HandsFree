@@ -30,10 +30,12 @@ been seen on a screen. Details and rationale: `CLAUDE.md` CHANGELOG.
 
 **Before this goes to a single tester, someone must:**
 
-1. `adb uninstall com.example.handsfree` then `./gradlew installDebug`. A
+1. `adb uninstall ph.edu.hau.handsfree` then `./gradlew installDebug`. A
    fresh install is not optional — the language, consent and how-to screens are
    each gated on a SharedPreference, so on an upgraded install every one of
-   them is skipped and the flow is untested.
+   them is skipped and the flow is untested. On a phone carrying a pre-1.1
+   build, uninstall `com.example.handsfree` as well: the applicationId changed,
+   so Android treats the two as unrelated apps and will happily keep both.
 2. Walk the whole first run: language → consent → permissions → how-to.
 3. Turn Wi-Fi and mobile data off, say "hanapin ang adobo recipe", and confirm
    the amber warning appears on both the floating popup and the debug screen.

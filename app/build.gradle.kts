@@ -1,5 +1,38 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
 plugins {
     alias(libs.plugins.android.application)
+}
+
+/**
+ * Short commit the APK was built from, plus a `-dirty` marker when the working
+ * tree had uncommitted changes.
+ *
+ * This is the field that actually matters for the tester round. `versionName`
+ * is human-facing and we will forget to bump it; the SHA maps a tester's
+ * exported log back to an exact commit without anyone having to remember
+ * anything. `-dirty` is the honest half of that: if it appears, the log came
+ * from a build that matches no commit at all, and the SHA next to it is a lie
+ * by omission without it.
+ *
+ * Falls back to "nogit" rather than failing, so a fresh clone with no `.git`
+ * (or a machine with no git on PATH) still builds. Read at configure time.
+ */
+fun gitStamp(): String = try {
+    fun git(vararg args: String): String {
+        val proc = ProcessBuilder(listOf("git") + args)
+            .directory(rootDir)
+            .redirectErrorStream(true)
+            .start()
+        val out = proc.inputStream.bufferedReader().use { it.readText() }.trim()
+        return if (proc.waitFor() == 0) out else ""
+    }
+    val sha = git("rev-parse", "--short", "HEAD")
+    if (sha.isEmpty()) "nogit" else sha + if (git("status", "--porcelain").isNotEmpty()) "-dirty" else ""
+} catch (e: Exception) {
+    "nogit"
 }
 
 android {
@@ -7,13 +40,32 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.handsfree"
+        // NOT the same thing as `namespace` above. This is the identity Android
+        // installs the app under; `namespace` is the package R and BuildConfig
+        // are generated into, and it still matches the Kotlin source tree.
+        // Changing this one makes the app a DIFFERENT app to Android — the old
+        // com.example.handsfree build must be uninstalled, not upgraded.
+        applicationId = "ph.edu.hau.handsfree"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1-tester1"
+
+        // Printed in the exported tester log. See MainActivity.buildReport().
+        buildConfigField("String", "BUILD_STAMP", "\"${gitStamp()}\"")
+        buildConfigField(
+            "String",
+            "BUILD_DATE",
+            "\"${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())}\""
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Off by default since AGP 8. Without it BuildConfig is never generated and
+    // the two fields above resolve to nothing.
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {

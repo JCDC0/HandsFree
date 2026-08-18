@@ -953,6 +953,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             appendLine()
             appendLine("Exported     : $stamp")
             appendLine("App version  : $version")
+            // The line that actually maps a log back to a commit. versionName
+            // is human-facing and gets forgotten; this does not.
+            appendLine("Build        : ${BuildConfig.BUILD_STAMP} @ ${BuildConfig.BUILD_DATE}")
             appendLine("Device       : ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("Android      : ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
             appendLine("Display lang : ${Copy.lang(this@MainActivity).label}")
