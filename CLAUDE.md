@@ -462,12 +462,17 @@ Two separate problems were found, not one:
      has the bug. Whoever fixed the documented input-name bug (see the code
      comments) made stages 2 and 3 defensive and missed doing the same for
      stage 1.
-   - **Not yet confirmed on an actual device via logcat** — this is a static
-     finding from running the exact bundled model files through
-     `onnxruntime`, matched against the exact cast in the Kotlin source. The
-     JVM behavior on the cast is deterministic and not in question; what
-     hasn't been watched happen live is the "KWS inference error" log line
-     firing on a phone. See the Claude Code handoff for that step.
+   - **Confirmed live on device, 2026-08-20 evening.** `adb logcat -s
+     KeywordSpotter OverlayService` with the call sign toggle on: 226
+     `ClassCastException`s in a 17.97 s capture, one every ~79 ms, matching
+     the 80 ms chunk cadence exactly — `KWS inference error` on literally
+     every frame, zero `KWS fired` lines. The logged exception message is
+     `java.lang.ClassCastException: float[][][][] cannot be cast to
+     float[][][]` at `KeywordSpotter.kt:181` — `float[][][][]` is the JVM's
+     own confirmation that the tensor really is rank 4, matching the
+     `onnxruntime` finding above exactly. The throw happens before any audio
+     content is examined, so this isn't about mishearing "Hey Jarvis" vs
+     "Hey HandsFree" — no phrase, spoken or not, can ever reach stage 2.
 
 Given finding 2, "just retrain the model" or "just relabel it" would not have
 been enough even before considering the naming problem — the cascade needs a
@@ -507,6 +512,40 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-20 (evening) — wake-word bug confirmed live; how-to screen rewritten; `ba999f1`
+Two things, one commit. Wake-word code untouched — `KeywordSpotter.kt`,
+`WakeWordDetector.kt`, `OverlayService.kt` are still at `fbbe5dc`.
+- **Device confirmation.** `adb logcat` with the call sign toggle on showed
+  the exact `ClassCastException` predicted earlier the same day — see §9 —
+  226 times in an 18 s capture, once per 80 ms chunk, never a "KWS fired"
+  line. This closes out the one thing the static ONNX-file finding couldn't
+  prove by itself. `PREF_WAKE_WORD` confirmed still defaults `false` on a
+  fresh install (`MainActivity.kt:288`); device showed Call sign: OFF.
+- **How-to screen rewritten.** `howto_body_en`/`howto_body_tl` in
+  `strings.xml` used to spend three paragraphs on activation methods before
+  a flat, ungrouped nine-item example list. Restructured to lead with
+  capability groups (opening apps, moving around the screen, answering
+  calls, web search, 2-3 examples each in both languages), then a shortened
+  activation section. Dropped "HEY HANDSFREE — NOT WORKING YET" — replaced
+  with one plain sentence that always-on listening is off in this build; the
+  bug itself belongs in the manuscript's Limitations section, not tester
+  copy. Also added a line inviting testers to check that everything but web
+  search works in airplane mode — the offline claim made checkable by a
+  non-technical tester, not just asserted.
+- **Rebuilt and installed clean.** This CLAUDE.md's own §9/CHANGELOG edits
+  from earlier the same day had been sitting uncommitted when the previous
+  handoff prompt claimed they were committed — they weren't, and a build
+  made against them would have stamped `-dirty`. Both are in `ba999f1` now.
+  First install under the `ph.edu.hau.handsfree` applicationId on this
+  device (`adb uninstall ph.edu.hau.handsfree` failed with
+  `DELETE_FAILED_INTERNAL_ERROR` since it had never been installed;
+  `com.example.handsfree` uninstalled cleanly first, per §6). Full first-run
+  walked on hardware: language → consent → setup → debug UI, confirming the
+  `fd27c60` consent-after-language fix holds on a real device.
+- Incidental, not a regression: `BadTokenException` / overlay permission
+  missing during this test — expected, the setup guide was intentionally
+  skipped since only the mic was needed.
 
 ### 2026-08-20 — wake word decided as a limitation; deeper bug found, no code changed
 Investigation only, in response to "how do I get Hey HandsFree working again"
