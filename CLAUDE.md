@@ -117,6 +117,8 @@ HandsFreeAccessibilityService    gestures, global actions, text input
 | `pipeline/TranslationLayer.kt` | Lexicon normalisation. |
 | `pipeline/AudioPreprocessor.kt` | Mic capture and VAD. |
 | `pipeline/AppStateMachine.kt` | Scaffolded, **not wired**. Multi-turn context. |
+| `pipeline/KeywordSpotter.kt` | Audio-level always-on wake detector. Runs `assets/kws/hey_jarvis_v0.1.onnx` — a **pretrained openWakeWord "Hey Jarvis" model**, not one trained on "Hey HandsFree." Threshold 0.5. See §9 for the naming mismatch this creates. |
+| `pipeline/WakeWordDetector.kt` | Text-level wake gate. Fuzzy-matches Whisper's transcript against `DEFAULT_VARIANTS` ("handsfree", "hansfree", …). In `OverlayService.applyWakeGate()`, this is **bypassed** whenever `awaitingCommand` is true, which is the state `handleKwsAudio()` sets on every KWS detection — so in always-on mode the phrase that actually opens the mic is "Hey Jarvis," and this detector's variant list never runs. |
 | `service/HandsFreeAccessibilityService.kt` | Gestures, global actions, volume-key activator. |
 | `service/OverlayService.kt` | Foreground service, bubble, orchestration. |
 | `MainActivity.kt` | Debug UI, permissions, loading dialog. |
@@ -418,6 +420,72 @@ pre-1.1 build, the old id has to go too: `adb uninstall com.example.handsfree`.
 **Not wired:** `AppStateMachine.kt` (scaffolded, never instantiated).
 Multi-turn commands hold no context — each utterance is independent.
 
+**Wake word: DECIDED AS A LIMITATION, 2026-08-20. Do not attempt to fix before
+Aug 25/28 — see below for why it is worse than a naming problem.**
+
+The always-on "Hey HandsFree" toggle is real code (`KeywordSpotter` +
+`WakeWordDetector`, see §3) and **already defaults to off** —
+`MainActivity.kt` line 288 reads `PREF_WAKE_WORD` with a `false` default, so a
+fresh install ships with it disabled. No code change is needed to make that
+true; it already is.
+
+Two separate problems were found, not one:
+
+1. **Wrong name.** The bundled audio model is openWakeWord's pretrained
+   `hey_jarvis_v0.1.onnx`, never retrained on "Hey HandsFree." Because
+   `applyWakeGate()` in `OverlayService.kt` skips the text-level
+   `WakeWordDetector` check whenever `awaitingCommand` is already true (which
+   the KWS detection sets), the phrase that would open the mic in always-on
+   mode is "Hey Jarvis," not "HandsFree."
+2. **It almost certainly does not run at all**, which is the more serious
+   finding, verified 2026-08-20 by loading the three bundled `.onnx` files
+   directly (not just reading the Kotlin) with `onnxruntime` and inspecting
+   real output tensors:
+   - `melspectrogram.onnx` returns a **rank-4** tensor, shape `(1, 1, 5, 32)`,
+     for the 1280-sample chunk `KeywordSpotter` feeds it — confirmed against
+     the graph's own declared output rank, not just one sample run.
+   - `KeywordSpotter.runMelSpectrogram()` casts that result to
+     `Array<Array<FloatArray>>` — a rank-3 array type — then reads `raw[0]`
+     assuming an `[8, 32]` frame block (`MEL_FRAMES_PER_CHUNK = 8`).
+   - JVM array types are reified and checked exactly; a rank-4 primitive
+     array cannot be cast to a rank-3 array type. This cast throws
+     `ClassCastException` on **every single call**, every 80ms, with no
+     exception except silence — `processAudio()`'s outer `catch (e:
+     Exception)` swallows it, logs "KWS inference error", and returns `-1f`.
+     `handleKwsAudio()` only proceeds past `if (score >= 0f && ...)`, so a
+     -1 score means `isKeywordDetected()` is never even reached. The real
+     frame count is 5, not 8, which would have broken the buffering loop
+     even if the cast were fixed.
+   - The other two stages (`runEmbedding()`, `runWakeWordClassifier()`) avoid
+     this failure mode — they unwrap the ONNX output recursively via `is
+     Array<*>` instead of a hard cast, so they're rank-agnostic. Only stage 1
+     has the bug. Whoever fixed the documented input-name bug (see the code
+     comments) made stages 2 and 3 defensive and missed doing the same for
+     stage 1.
+   - **Not yet confirmed on an actual device via logcat** — this is a static
+     finding from running the exact bundled model files through
+     `onnxruntime`, matched against the exact cast in the Kotlin source. The
+     JVM behavior on the cast is deterministic and not in question; what
+     hasn't been watched happen live is the "KWS inference error" log line
+     firing on a phone. See the Claude Code handoff for that step.
+
+Given finding 2, "just retrain the model" or "just relabel it" would not have
+been enough even before considering the naming problem — the cascade needs a
+real bug fix to stage 1's array handling before it produces a score at all.
+That tips this decisively toward **not attempting a fix before the deadline**.
+
+**Decision: ship the toggle off by default (already true — no code change),
+leave the code as-is, and report this in the manuscript's Limitations section**
+as a real, understood engineering gap: a keyword-spotting cascade was
+implemented and integrated end-to-end, but a decoding bug in the mel-spectrogram
+stage was found too close to submission to safely fix and re-verify, and the
+acoustic model itself was never retrained on the app's own call sign in any
+case. Also update `strings.xml`'s how-to copy, which currently says "Hey
+HandsFree — NOT WORKING YET" — still directionally correct, but for a
+different reason than the copy implies, and worth rewording precisely rather
+than left as-is. Still unverified either way: whether openWakeWord's licence
+permits redistributing `hey_jarvis_v0.1.onnx` inside the APK.
+
 **Never measured:** command success rate. There is no trial count and no
 denominator anywhere in this project. See `RESEARCH_DOCUMENTATION.md` §9.
 
@@ -439,6 +507,36 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-20 — wake word decided as a limitation; deeper bug found, no code changed
+Investigation only, in response to "how do I get Hey HandsFree working again"
+and later "verify if Hey Jarvis actually works." No file in `pipeline/` or
+`service/` was edited — this is documentation of a decision plus a finding.
+- **Finding 1 (earlier the same day):** the bundled audio model
+  (`assets/kws/hey_jarvis_v0.1.onnx`) is openWakeWord's pretrained "Hey
+  Jarvis" detector, never retrained on "Hey HandsFree."
+- **Finding 2, more serious:** loaded the three bundled `.onnx` files directly
+  with `onnxruntime` outside the app. `melspectrogram.onnx` returns a rank-4
+  tensor `(1, 1, 5, 32)` for the app's 1280-sample chunk, but
+  `KeywordSpotter.runMelSpectrogram()` casts the result to
+  `Array<Array<FloatArray>>` (rank 3) and assumes 8 frames
+  (`MEL_FRAMES_PER_CHUNK`), not the real 5. JVM array casts are checked
+  exactly; this throws `ClassCastException` on every call, caught silently by
+  `processAudio()`'s outer catch, which returns `-1f` — meaning the keyword
+  spotter almost certainly never produces a valid score at all, independent
+  of the naming problem. The other two ONNX stages avoid this because they
+  unwrap output recursively instead of hard-casting; only stage 1 has the
+  bug. Not yet confirmed via on-device logcat — see the Claude Code handoff.
+- **Decision, actioned:** ship the toggle off by default. Confirmed this is
+  already the case (`MainActivity.kt`'s `PREF_WAKE_WORD` default is `false`)
+  — no code change required for that part. Report the wake word in the
+  manuscript as a stated limitation rather than attempting a fix: given
+  finding 2, this is not a quick relabel, it needs a real bug fix to stage 1
+  plus a retrain, and there isn't time to do both safely and re-verify before
+  Aug 25/28.
+- Logged here and in `PROJECT_STATE.md` §24 and in a dated note for Eriel in
+  `Manuscript/` because this was previously known only inside one chat
+  session; written down so it survives a lost session.
 
 ### 2026-08-18 — build identity for the tester round
 Build config only. No feature, pipeline, lexicon or UI change.
