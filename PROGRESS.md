@@ -30,18 +30,34 @@ have been conflated repeatedly in this project and it has cost real time.
 | **"Hey Jarvis" call sign** (opt-in, off by default) | ✅ fixed 08-24 | ✅ **fires reliably — 0.94–0.99 against a 0.023 noise floor, 37x margin** |
 | Consent / how-to / language screens | ✅ | ✅ walked on device, both languages |
 | Log export → share sheet | ✅ | ✅ **verified 2026-08-24 — real log exported and delivered to Drive** |
-| CALL_ACCEPT / DECLINE | ✅ repaired | ❌ **never once succeeded on hardware** |
+| CALL_ACCEPT — answer | ✅ | ✅ **verified 2026-08-24 on a real ringing call** |
+| CALL_ACCEPT — reject | ✅ | ⚠️ same code path, `endCall()` branch not yet spoken aloud |
 | SCHEDULING (alarm + timer) | ✅ repaired twice | ❌ **never once opened the Clock** |
 | MESSAGING | ⛔ classifies only | n/a — out of scope by design |
 
-### The one thing still unproven
+### CALL_ACCEPT — closed 2026-08-24
 
-**CALL_ACCEPT.** Tested for real once, on 2026-08-12, and it failed because
-`ANSWER_PHONE_CALLS` had never been declared. Declared and requested since, but
-**no ringing call has been answered by voice at any point.** It needs a second
-phone, the Phone permission granted, and someone to say "sagutin". This is now
-the oldest outstanding item in the project and the only demo feature with no
-evidence behind it.
+**Answering works on a real ringing call.** This was the oldest open item in the
+project: tested once on 2026-08-12, failed because `ANSWER_PHONE_CALLS` had never
+been declared, repaired, and then sat unverified for twelve days because
+verifying it needs a second phone. `Result: SUCCESS - Call answered`, confirmed
+by JC.
+
+**Rejecting is the same function, same permission, one branch over** —
+`handleCall()` picks `endCall()` instead of `acceptRingingCall()` when the
+utterance contains a decline word. Every reject phrase was verified through the
+offline simulation, but **the `endCall()` branch has not been spoken aloud on a
+ringing call.** Given how this project has gone, that distinction is worth
+keeping: it is very likely fine, and it is not evidence.
+
+Say **"hindi"**, **"tanggihan"**, **"huwag"** or **"ayaw"** to a ringing phone
+and it is closed too.
+
+### Nothing else is unproven
+
+Every feature in the demo scope now has device evidence behind it. What remains
+is research work: surveys, the tester cohort, and the Application Error Rate
+(`RESEARCH_DOCUMENTATION.md` §9a has the method).
 
 ### Log export — verified 2026-08-24
 

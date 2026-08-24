@@ -387,12 +387,15 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
   screen. Tap-by-name has now executed for real at least once.
 
 **Code-complete but never executed on the device:**
-- **CALL_ACCEPT.** Tested for real at 21:13–21:14 and it failed — the permission
-  it depends on had never been declared. Repaired since (see CHANGELOG,
-  night 2) but **the repair itself is unverified**: the build carrying it was
-  never installed, because the device was disconnected. Install it, grant the
-  new Phone permission when prompted, and call the device again. Still the
-  highest-risk item on the board.
+- ~~**CALL_ACCEPT.**~~ **CLOSED 2026-08-24.** Answering a real ringing call
+  works (`Result: SUCCESS - Call answered`). It had been the oldest open item in
+  the project — failed its first real test on 2026-08-12 because
+  `ANSWER_PHONE_CALLS` was never declared, was repaired the same night, then sat
+  unverified for twelve days because confirming it needs a second phone.
+  **Rejecting is one branch over** in the same `handleCall()` — `endCall()`
+  rather than `acceptRingingCall()`, same permission, chosen when the utterance
+  contains a decline word. Verified in simulation for every decline phrase;
+  **not yet spoken aloud on a ringing call.**
 - SCHEDULING alarm/timer — the permission was only actually granted as of the
   night build; every alarm attempt before it threw `SecurityException`. Never
   once seen to open the Clock app. Treat as unverified.
@@ -499,6 +502,26 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-24 (night, 4) — CALL_ACCEPT verified. Docs only, no code.
+- **Answering a real ringing call works.** `Result: SUCCESS - Call answered`,
+  confirmed by JC. This closes the oldest open item in the project: it failed
+  its first and only real test on 2026-08-12 because `ANSWER_PHONE_CALLS` had
+  never been declared, was repaired that night, and then went twelve days
+  unverified because confirming it needs a second phone.
+- **Every feature in the demo scope now has device evidence behind it.** That
+  has not been true at any previous point.
+- **Reject is not yet closed.** Same `handleCall()`, same permission, one
+  conditional branch apart: `endCall()` instead of `acceptRingingCall()`, chosen
+  when the normalised utterance contains a `DECLINE_WORDS` entry. All 13 decline
+  phrases verified through the offline simulation, but the `endCall()` branch
+  has never been exercised aloud. Recorded as simulation-only rather than folded
+  into the answer result — this project has paid for conflating those before.
+- Reject vocabulary, for the record: `hindi`, `huwag`, `wag`, `ayaw`, `ayaw ko`,
+  `tanggihan`, `tangihan`, `tanggihan mo`, `itanggi`, `i-reject`, plus the
+  garble forms `tang guihan` / `tang gihan` / `tang guihang`. Answer side:
+  `sagutin`, `sagot`, `sagutan`, `sagotin`, `isagot`, `i-answer`, `tanggapin`,
+  `oo`, `sige na`, plus `sa gutin` / `sa gutan` / `sa goton`.
 
 ### 2026-08-24 (night, 3) — log export verified on device. Docs only, no code.
 - **The export works end to end.** JC exported a real log on device and

@@ -693,9 +693,10 @@ development, at direct cost to the schedule.
 | NAVIGATION — back, home, scroll | Yes |
 | NAVIGATION — tap-by-name | Yes — "pindutin ang kalendar" tapped Calendar |
 | SMART_SEARCH | Yes |
-| CALL_ACCEPT | **No.** Failed its only real test; repaired; repair not yet re-tested |
+| CALL_ACCEPT — answer | **Yes**, 2026-08-24, on a real ringing call. Failed its first test on 2026-08-12; repaired; re-tested successfully |
+| CALL_ACCEPT — reject | Not spoken aloud. Same function and permission as answer, one conditional branch apart (`endCall()` vs `acceptRingingCall()`); verified in offline simulation only |
 | SCHEDULING | **No.** Never observed to open the Clock application |
-| Wake-word activation | **No.** Verified offline against 24 phrases only |
+| Wake-word activation | **Yes**, 2026-08-24. Measured over 150 s continuous operation — see §8a |
 | MESSAGING | Not implemented by design |
 
 The gap between rows 4 and 6 is the study's main evidentiary weakness. A fixed
