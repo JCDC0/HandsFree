@@ -513,6 +513,40 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-08-24 (later still) — debug screen follows the language toggle; APK 1.4
+The toggle only ever moved the long-form copy. Every button and card label
+stayed Tagalog whichever language you picked — the log button still read
+"Narinig, Salin & Intent Log" in English mode, and the panes were still
+NARINIG and SALIN. To anyone who used the setting it looked broken.
+
+- **31 string pairs added** for the debug-screen chrome: card labels
+  (NARINIG/TRANSCRIBED, SALIN/TRANSLATED, NATUKOY NA UTOS/DETECTED INTENT),
+  every button, both log dialogs and their Copy/Close actions, the Setup
+  Required dialog and its bullets, and the Missing/Listening status lines.
+- **The layout now ships those labels blank**, and `applyLanguage()` is the
+  only thing that fills them. Deliberate: a label nobody wires up shows as an
+  *empty* control, which gets noticed, instead of stale text in the wrong
+  language — which is precisely this bug, and it survived several rounds
+  unnoticed.
+- Start/stop was assigned as a literal in six places, which is why it could
+  never have followed the toggle. Now one `setStartButtonLabel(running)`.
+- **`statusText` needed recomputing, not reassigning.** It holds computed text,
+  so `applyLanguage()` calls `updatePermissionStatus()`. And the old
+  `startsWith("Missing")` test that cleared it was replaced with a
+  `statusShowsMissing` flag — translating the prefix silently broke that check
+  in Tagalog, so the line would never have cleared once permissions were
+  granted. Caught on device, not in review.
+- "Accessibility settings" is intentionally the same word in both. Android's
+  own Settings app uses it untranslated in Filipino; inventing a Tagalog term
+  would send testers looking for a menu that does not exist under that name.
+- Verified on device 144512558D105352, both directions, no restart needed.
+- Drive: `HandsFree-1.4-tester.apk` live (`BUILD_STAMP 07959bd`); 1.3 archived.
+  **The first 1.4 copy was stamped `b1ab4c6-dirty`** because it was built
+  before the last fix was committed — caught, rebuilt on a clean tree, and
+  re-copied. Worth remembering: `installDebug` during development produces
+  exactly the untraceable artifact §6 warns about, so always rebuild after the
+  final commit before copying to Drive.
+
 ### 2026-08-24 (later) — mic-open cap made adjustable, default 4s; APK 1.3
 The 1.2 change (trailing silence 1.47s -> 1.02s) fixed the wrong number for the
 symptom testers actually reported. A tester spoke a command, went silent, and
