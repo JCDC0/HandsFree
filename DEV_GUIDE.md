@@ -97,10 +97,16 @@ differs is what is listening and where:
 
 | | "Hey Google" | HandsFree today |
 |---|---|---|
-| Model | purpose-built keyword spotter, well under a million parameters | whisper-tiny, 37.8M parameters |
+| Model | purpose-built keyword spotter, well under a million parameters | **same shape** — 3-stage openWakeWord cascade, ~3.6 MB |
 | Runs on | the phone's always-on low-power audio DSP (sensor hub), main CPU asleep | the application CPU |
-| Wakes the CPU | only after the keyword fires | every utterance-shaped sound |
-| Audio handling | rolling buffer inside the DSP, discarded unless the keyword hits | full 30 s window decoded |
+| Wakes the full recogniser | only after the keyword fires | **only after the keyword fires** |
+| Audio handling | rolling buffer inside the DSP, discarded unless the keyword hits | rolling buffer in the app, discarded unless the keyword hits |
+| Microphone | **held by the DSP, not by an app** — no green mic indicator | **held by the app** — green indicator on, and subject to mic contention |
+
+The remaining difference is the one line that matters: **where the microphone is
+held.** Ours is an ordinary app recording; theirs is a firmware path an app
+never touches until the keyword fires. That is a privilege difference, not a
+model-size difference, and no amount of optimisation closes it.
 
 Android exposes that path as the **SoundTrigger HAL**, reached through
 `AlwaysOnHotwordDetector`. Two things put it out of reach for us:
@@ -117,12 +123,18 @@ Android 12 added `HotwordDetectionService`, which lets an assistant-role app run
 its **own** detector in an isolated process — software, not DSP. That is a real
 path for a third-party app, and it is the one worth investigating post-demo.
 
-**The cheap win, though, is not an Android API — it is model size.** Production
-pipelines cascade: a tiny always-on keyword spotter gates a full recogniser.
-We currently have the second stage doing the first stage's job. Putting any
-small keyword-spotting model in front of Whisper would cut the idle cost by
-orders of magnitude while leaving the architecture, the offline claim and the
-determinism claim exactly as they are. See §6 task 4c.
+**The cheap win was never an Android API — it was model size, and it is done.**
+Production pipelines cascade: a tiny always-on keyword spotter gates a full
+recogniser. Until 2026-08-24 we had the second stage doing the first stage's
+job, running Whisper on every utterance-shaped sound in the room. The cascade
+now does the gating, at under 3 ms per 80 ms frame, and the architecture, the
+offline claim and the determinism claim are all unchanged.
+
+**What that did not buy is microphone occupancy.** The CPU and battery cost of
+always-on dropped by orders of magnitude; the mic is still held open by the app
+the whole time it is enabled, with the green indicator lit, and can still be
+taken by another app. That is the SoundTrigger privilege above, and it is the
+reason the call sign remains opt-in and off by default even now that it works.
 
 **If the call sign is not waking the app, add the mishearing to
 `WakeWordDetector.DEFAULT_VARIANTS`** — same maintenance loop as the lexicon.
