@@ -513,6 +513,41 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-08-24 — faster hand-off to inference; tester APK 1.2
+- **Trailing silence 1.47s -> 1.02s.** `AudioPreprocessor`'s VAD waited 23
+  chunks x 64ms after speech stopped before declaring the utterance over. Now
+  16 (`SILENCE_CHUNKS`, named rather than a bare literal). Reported by a
+  groupmate as "an absurd amount of time" waiting to transcribe.
+- **What that actually buys, measured on 144512558D105352:** end of speech ->
+  VAD fires was 1.47s; VAD -> command result is 2.08s. So the felt wait goes
+  from ~3.55s to ~3.10s. **The dominant cost is Whisper inference, not the
+  VAD** — every utterance is padded to a fixed 30s window and decoded, so it
+  costs the same ~2s whether you spoke for one second or ten (§5). Anyone
+  asked to make this "instant" should be given that number first.
+- **Do not push `SILENCE_CHUNKS` much below 16.** It is the pause budget a
+  speaker gets *inside* one command, and Tagalog command phrasing has real
+  mid-utterance pauses. Too low hands the recogniser half a phrase, which then
+  reads as a lexicon failure in the transcript log and costs far more to chase
+  than the 0.45s saved.
+- **`LISTEN_WINDOW_MS` (8s) deliberately unchanged.** It is the cap for when
+  VAD never fires at all — a room noisy enough to hold RMS above
+  `VAD_THRESHOLD` keeps the mic open the full 8s, then adds ~2s of inference.
+  That is a likelier source of a "5 seconds" report than the trailing-silence
+  value, but shortening it would cut off a tester who pauses before starting
+  to speak, so it needs a decision rather than a quiet edit. Open question.
+- Version bumped to `1.2-tester` / `versionCode 3` so the app agrees with the
+  APK filename in Drive. **The shipped APK was built at `06f6ab2`** — that is
+  the `BUILD_STAMP` a tester's exported log will carry, not this commit.
+- Drive: `HandsFree-1.2-tester.apk` is live at the thesis-folder root; the
+  previous build was moved to
+  `_ARCHIVE/2026-08-20_tester-build-1.1_SUPERSEDED-by-1.2-faster-VAD.apk`, per
+  the team's `_FILE RULES` RULE 3. **Not** `Old/`, which those rules define as
+  pre-pivot manuscript versions. Copy verified by md5 against the build output.
+- **Not verified on device.** The phone was disconnected before 1.2 could be
+  installed, and confirming the shorter wait needs someone to speak into it.
+  The change is one constant, so the arithmetic is not in doubt; what has not
+  been watched is a real utterance ending 0.45s sooner.
+
 ### 2026-08-20 (evening) — wake-word bug confirmed live; how-to screen rewritten; `ba999f1`
 Two things, one commit. Wake-word code untouched — `KeywordSpotter.kt`,
 `WakeWordDetector.kt`, `OverlayService.kt` are still at `fbbe5dc`.
