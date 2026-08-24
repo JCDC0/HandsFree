@@ -638,7 +638,49 @@ in this project.
 | On-device transcript matches the reference implementation | **Not done.** No bundled test `.wav` was compared against the notebook output for the same file | **Absent** — the front-end faults in §8.1 were found by symptom, not by this check |
 | Commands resolve to the correct intent | 52-phrase offline matrix replaying `TranslationLayer` + `LevenshteinMatcher`, 0 failures | Moderate — verifies the JSONs, not the audio path |
 | Commands execute correctly on device | Ad-hoc voice testing, logged in Transcript History | Weak — no fixed protocol, one device, one speaker |
-| Command success rate | **Not measured.** No denominator, no trial count | **Absent** |
+| Command success rate | **Not measured**, but the instrument now exists and is proven — see §9a | **Absent, obtainable** |
+
+### 9a. Application Error Rate — the instrument exists
+
+Every utterance writes one transcript entry carrying `Result: SUCCESS` or
+`Result: FAILED`, and the export delivers those entries as a readable file whose
+header records the build, language and settings. The metric is therefore a count
+over returned logs rather than a new measurement apparatus:
+
+```
+Application Error Rate = FAILED utterances / total utterances
+```
+
+Verified end to end on 2026-08-24: a tester log exported from the device and
+opened elsewhere yielded 11 utterances, 4 SUCCESS, 7 FAILED — an error rate of
+63.6% — computed directly from the file with no manual annotation.
+
+**That figure is a demonstration of the method, not a result.** Three caveats
+must be settled before any number is reported:
+
+1. **It predates the fix.** That log came from build 1.5; three of its seven
+   failures (`go bak`, `tubak`, `pinto tin ang google`) were lexicon gaps closed
+   in 1.5.1. Only logs from a single fixed build may be pooled.
+2. **The denominator is a methodological choice.** Some entries are non-speech
+   captures — the recogniser emitting bracketed markers such as `[sum]` for room
+   noise. Counting an accidental capture as a failed command inflates the error
+   rate; excluding it silently discards a real failure mode (the app listening
+   when nobody addressed it). **Decide, state the rule, and apply it uniformly.**
+   Reporting both figures is defensible and stronger than picking one.
+3. **One speaker, one device is not a sample.** The number becomes a result only
+   across the tester cohort.
+
+**Recommended reporting:** overall error rate, plus a breakdown by failure stage,
+which the logs already support without extra instrumentation —
+
+| Stage | What it means | Example from the 2026-08-24 log |
+|---|---|---|
+| No intent matched | Transcript reached the classifier and matched nothing | 4 |
+| Matched, execution failed | Intent correct, action could not complete | 3 (2 APP_LAUNCH, 1 SMART_SEARCH) |
+
+That split is the useful one for the discussion chapter: the first is a
+recognition or lexicon gap, the second is an execution gap, and they have
+entirely different remedies.
 
 **Per-feature status as of 2026-08-12, night.** Recorded at this granularity
 because "code complete" and "observed working" were repeatedly conflated during

@@ -159,10 +159,12 @@ row is what people remember.
 
 ## 6. Leave the call sign OFF
 
-"Hey HandsFree" works, but it has never been spoken on the device, and while it
-is on the microphone cycles continuously and Whisper runs on every
-utterance-shaped sound in the room. In a room with an adviser talking, that is
-both a battery problem and an unpredictability problem.
+**Updated 2026-08-24: the reason changed.** The call sign now works and fires
+reliably ("Hey Jarvis" — see `CLAUDE.md` §9), and it no longer runs Whisper on
+every sound in the room; a keyword spotter does that job for a fraction of the
+cost. But it still holds the microphone open, and a live room with an adviser
+talking in it is still the worst place to demonstrate an always-on feature you
+do not need. Leave it off.
 
 If the adviser asks whether it has a wake word, say yes, describe it, and offer
 to show it **after** the scripted demo — not during.
