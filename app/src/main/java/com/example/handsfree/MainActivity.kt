@@ -253,7 +253,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         if (wakeWordOn) {
             Toast.makeText(
                 this,
-                "Say \"Hey HandsFree\" then your command. The mic stays on.",
+                "Say \"Hey Jarvis\" then your command. The mic stays on.",
                 Toast.LENGTH_LONG
             ).show()
         }

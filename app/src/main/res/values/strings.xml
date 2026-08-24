@@ -95,10 +95,10 @@
     <string name="ui_btn_start_en">▶  Start Listening</string>
     <string name="ui_btn_stop_tl">■  Itigil ang pakikinig</string>
     <string name="ui_btn_stop_en">■  Stop Listening</string>
-    <string name="ui_btn_callsign_on_tl">👂 Callsign: BUKAS</string>
-    <string name="ui_btn_callsign_on_en">👂 Call sign: ON</string>
-    <string name="ui_btn_callsign_off_tl">👂 Callsign: SARADO</string>
-    <string name="ui_btn_callsign_off_en">👂 Call sign: OFF</string>
+    <string name="ui_btn_callsign_on_tl">👂 Hey Jarvis: BUKAS</string>
+    <string name="ui_btn_callsign_on_en">👂 Hey Jarvis: ON</string>
+    <string name="ui_btn_callsign_off_tl">👂 Hey Jarvis: SARADO</string>
+    <string name="ui_btn_callsign_off_en">👂 Hey Jarvis: OFF</string>
     <string name="ui_btn_accessibility_tl">⚙  Accessibility settings</string>
     <string name="ui_btn_accessibility_en">⚙  Accessibility Settings</string>
     <string name="ui_btn_history_tl">📜 Narinig, Salin at Intent Log</string>

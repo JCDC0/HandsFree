@@ -8,85 +8,60 @@
 > The bottleneck is the **lexicon**, not the model. Bring voice-test logs, add
 > the garble to `app/src/main/assets/translation-lexicon.json`, rebuild.
 
-**Last updated:** 2026-08-17
-**Build status:** `assembleDebug` GREEN. **Not installed.** No device was
-connected when the tester-round work below was built, so the last APK that
-actually ran on hardware is the 2026-08-12 night build.
+**Last updated:** 2026-08-24
+**Build status:** `1.5.1-tester`, versionCode 7. `assembleDebug` green,
+installed on 144512558D105352, published to Drive as
+`HandsFree-1.5.1-tester.apk`.
 
 ---
 
-## Tester round (2026-08-17) — built, compiled, never run
-
-Five things were added for testers outside the team. All five compile; none has
-been seen on a screen. Details and rationale: `CLAUDE.md` CHANGELOG.
-
-| Added | Code | Seen working? |
-|---|---|---|
-| Consent screen before the permission chain | ✅ | ❌ |
-| How-to screen when accessibility goes on | ✅ | ❌ |
-| Tagalog / English display toggle | ✅ | ❌ |
-| Offline warning on SMART_SEARCH | ✅ | ❌ |
-| Log export → share sheet (Google Form) | ✅ | ❌ |
-
-**Before this goes to a single tester, someone must:**
-
-1. `adb uninstall ph.edu.hau.handsfree` then `./gradlew installDebug`. A
-   fresh install is not optional — the language, consent and how-to screens are
-   each gated on a SharedPreference, so on an upgraded install every one of
-   them is skipped and the flow is untested. On a phone carrying a pre-1.1
-   build, uninstall `com.example.handsfree` as well: the applicationId changed,
-   so Android treats the two as unrelated apps and will happily keep both.
-2. Walk the whole first run: language → consent → permissions → how-to.
-3. Turn Wi-Fi and mobile data off, say "hanapin ang adobo recipe", and confirm
-   the amber warning appears on both the floating popup and the debug screen.
-4. Speak a few commands, tap **Export Log for Google Form**, and confirm the
-   share sheet opens and the resulting `.txt` is readable. A `FileProvider`
-   misconfiguration throws at share time, not at build time.
-
----
-
-## Where the demo stands
+## Current state — 2026-08-24
 
 Two columns, deliberately. "Code complete" and "seen working with my own eyes"
 have been conflated repeatedly in this project and it has cost real time.
 
-| Feature | Code | Spoken aloud on the device? |
+| Feature | Code | Observed on the device? |
 |---|---|---|
 | Whisper transcription (Tagalog) | ✅ | ✅ real transcripts, no hallucination |
-| APP_LAUNCH — YouTube, Facebook | ✅ | ✅ |
-| NAVIGATION — back, home | ✅ | ✅ |
-| NAVIGATION — scroll up/down | ✅ | ✅ |
-| NAVIGATION — tap-by-name ("pindutin ang kalendar") | ✅ | ✅ tapped Calendar on the home screen |
-| SMART_SEARCH — "hanapin ang sapatos" | ✅ | ✅ |
-| CALL_ACCEPT / DECLINE | ✅ repaired | ❌ **tested 21:13, failed. Repair not yet installed — see below** |
-| SCHEDULING (alarm + timer) | ✅ repaired twice | ❌ **never once opened the Clock** — the permission was misnamed until the night build |
+| APP_LAUNCH | ✅ | ✅ YouTube, Facebook, Duolingo, HandsFree |
+| NAVIGATION — back, home, scroll | ✅ | ✅ |
+| NAVIGATION — tap-by-name | ✅ | ✅ tapped Calendar on the home screen |
+| SMART_SEARCH | ✅ | ✅ + offline warning |
+| **"Hey Jarvis" call sign** (opt-in, off by default) | ✅ fixed 08-24 | ✅ **fires reliably — 0.94–0.99 against a 0.023 noise floor, 37x margin** |
+| Consent / how-to / language screens | ✅ | ✅ walked on device, both languages |
+| Log export → share sheet | ✅ | ⚠️ **not exercised end to end** |
+| CALL_ACCEPT / DECLINE | ✅ repaired | ❌ **never once succeeded on hardware** |
+| SCHEDULING (alarm + timer) | ✅ repaired twice | ❌ **never once opened the Clock** |
 | MESSAGING | ⛔ classifies only | n/a — out of scope by design |
-| "Hey HandsFree" call sign (opt-in) | ✅ new | ❌ **never spoken on the device** |
 
-The current build **is** installed on 144512558D105352. Open the app once: it
-will now ask for a **Phone** permission that did not exist before, and nothing
-about calls works until that is granted (`dumpsys` currently reports
-`ANSWER_PHONE_CALLS: granted=false`, which is normal for a runtime permission
-nobody has accepted yet).
+### The two things still unproven
 
-**The three things that matter before the demo, in order:**
+1. **CALL_ACCEPT.** Tested for real once, on 2026-08-12, and it failed because
+   `ANSWER_PHONE_CALLS` had never been declared. Declared and requested since,
+   but **no ringing call has been answered by voice at any point.** It needs a
+   second phone, the Phone permission granted, and someone to say "sagutin".
+   This is the oldest outstanding item in the project.
+2. **The log export.** The share sheet has never been opened on a device, and a
+   `FileProvider` misconfiguration throws at share time, not at build time.
+   Speak a few commands, tap **Export Log for Google Form**, confirm the file
+   opens and is readable.
 
-1. **Install the current build, grant the new Phone permission, and call the
-   device again.** CALL_ACCEPT was tested for real at 21:13 and failed — it
-   depended on `ANSWER_PHONE_CALLS`, which the app had never declared or
-   requested. That is fixed in code but **the fixed build has never been
-   installed**: the phone was disconnected when it was built. Until someone
-   plugs in, runs `./gradlew installDebug`, accepts the Phone permission prompt
-   and hears "sagutin" answer a real call, one third of the demo is unproven.
-   The transcript log will also lie less now — the old code reported "Call
-   answered" whether or not anything happened.
-2. **Retest "pindutin ang Games"** on the actual home screen. The fix was
-   verified in an offline simulation, not aloud.
-3. **Run the demo sequence end to end, three times, without changing anything
-   between runs.** Consistency is what the adviser is judging, not breadth.
+Everything else is lexicon work, which is endless. Task list: `DEV_GUIDE.md` §6.
 
-Everything else is lexicon work, which is endless and can continue after the
-demo. Task list: `DEV_GUIDE.md` §6.
+### Fresh installs
+
+`adb uninstall ph.edu.hau.handsfree` before installing if you want to see the
+first-run flow: language → consent → permissions → how-to are each gated on a
+SharedPreference, so an upgrade skips all of them. On a phone carrying a pre-1.1
+build, uninstall `com.example.handsfree` as well — the applicationId changed, so
+Android treats them as unrelated apps and will keep both.
+
+---
+
+## Historical — the Aug 13 adviser demo
+
+The demo has happened. This section is kept for the record; the "before the
+demo" checklists it used to carry are done or superseded by the table above.
 
 ---
 

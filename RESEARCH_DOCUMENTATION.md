@@ -544,13 +544,18 @@ how the system's Filipino-language coverage was actually derived.
 
 ### 8. Wake-word activation without a hotword engine
 
-An always-on call sign ("Hey HandsFree") was added as an **opt-in, default-off**
-activation mode. It is implemented without a dedicated keyword-spotting engine
-and without any new dependency: the ordinary capture → transcribe cycle runs in a
-loop, and every transcript that does not open with the call sign is discarded.
-The decision is made by the same Levenshtein function used for intent
-classification, so the feature introduces no new class of non-determinism and the
-offline constraint is unaffected.
+> **Superseded 2026-08-24.** The text-level approach described in the rest of
+> this section was replaced by a real keyword-spotting cascade, which is
+> measured and working. The original text is retained below because the
+> transition is itself a finding, but §8a is what the app now does.
+
+An always-on call sign was added as an **opt-in, default-off** activation mode.
+It was first implemented without a dedicated keyword-spotting engine and without
+any new dependency: the ordinary capture → transcribe cycle ran in a loop, and
+every transcript that did not open with the call sign was discarded. The
+decision was made by the same Levenshtein function used for intent
+classification, so the feature introduced no new class of non-determinism and
+the offline constraint was unaffected.
 
 Matching joins up to three consecutive tokens and compares them with whitespace
 removed, because the ASR's word segmentation is unreliable — "hands free",
@@ -565,6 +570,61 @@ always-on classifier gating a large model — and naming that trade-off explicit
 is more defensible than presenting the feature as free.
 
 ---
+
+### 8a. Keyword-spotting cascade (supersedes item 8, 2026-08-24)
+
+The text-level approach above was replaced with a three-stage keyword-spotting
+cascade using openWakeWord ONNX models, run on the ONNX Runtime already present
+for the speech model. No additional dependency was introduced.
+
+| Stage | Model | Output |
+|---|---|---|
+| 1 | `melspectrogram.onnx` | 5 mel frames x 32 bins per 80 ms chunk |
+| 2 | `embedding_model.onnx` | 96-dim vector per chunk, over a 76-frame window |
+| 3 | `hey_jarvis_v0.1.onnx` | detection probability over a 16-vector (~1.28 s) window |
+
+Only the third stage is keyword-specific. Stages 1 and 2 are general-purpose
+acoustic front ends, so substituting a different keyword means training a new
+~1.2 MB classifier over the same features rather than altering the pipeline.
+
+**Measured performance**, device 144512558D105352, 150 s continuous operation,
+62 sampled 2-second windows:
+
+| Metric | Value |
+|---|---|
+| Detections | 4 windows: 0.9931, 0.9943, 0.9433, 0.8699 |
+| Non-detection maximum | 0.0232 |
+| Non-detection mean | 0.00055 (n = 58) |
+| Decision threshold | 0.50 |
+| Separation | lowest detection is 37x the highest non-detection |
+
+Three detections triggered the full pipeline; two completed an application-launch
+command end to end.
+
+**Stated limitation.** The deployed keyword is "Hey Jarvis", openWakeWord's
+pretrained detector, not the application's own name. The acoustic model was
+never retrained on Filipino-accented speech or on the phrase "Hey HandsFree".
+Doing so is a data-collection task requiring a negative set drawn from Tagalog
+speech, and is identified as future work. The feature ships **disabled by
+default**: continuous operation holds the microphone open, a power and privacy
+cost the study does not impose on participants without an explicit opt-in.
+
+**Determinism is preserved.** The cascade is a fixed sequence of convolutional
+models with a constant threshold; identical audio yields an identical score. No
+sampling and no language model are involved, so the architectural claim in §4 is
+unaffected.
+
+**Engineering finding worth reporting.** The cascade was integrated but
+non-functional for two development sessions. Three independent defects were
+present, **each individually sufficient** to prevent any detection: a rank-4
+output tensor cast to a rank-3 array type, a frame-count constant of 8 where the
+model emits 5, and audio normalised to [-1, 1] where the model expects raw
+16-bit magnitudes. The third produced no error of any kind — merely a classifier
+output pinned near zero — and would have survived correction of the other two.
+All three were located by loading the model files directly and comparing their
+declared input/output signatures against the implementation, rather than by
+inspecting the implementation alone. This is the same verification method
+recommended, and still outstanding, for the speech model in §6.
 
 ## 9. What is verified, and how
 

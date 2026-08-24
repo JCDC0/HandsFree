@@ -31,10 +31,12 @@ work live just because it appears here.
 Particles are ignored, so `po`, `mo`, `nga`, `naman`, `lang`, `paki-`, `pwede
 mo bang` are all safe to say naturally.
 
-**Call sign (optional, off by default).** Tap **👂 Call sign: OFF** in the debug
-UI to turn it on, then say **"Hey HandsFree"** followed by any command above —
-either in one breath ("Hey HandsFree, buksan mo ang YouTube") or on its own,
-which arms the next utterance as the command. See §1a before switching it on.
+**Call sign (optional, off by default).** Tap **👂 Hey Jarvis: OFF** in the debug
+UI to turn it on, then say **"Hey Jarvis"**, wait for the box, and say your
+command. The phrase really is *Hey Jarvis* — the bundled detector is
+openWakeWord's pretrained model and has never been trained on the app's own
+name. Training a real "Hey HandsFree" is §6b, and is **not** to be started
+before Aug 28. See §1a before switching it on.
 
 **Demo sequence (rehearse this, do not improvise):** open the app → hold the
 activator → "buksan mo ang YouTube" → "bumalik" → incoming call → "sagutin".
@@ -44,20 +46,45 @@ Do not demo Messaging. Scheduling works but is not part of the script.
 
 ## 1a. The call sign — how it works and what it costs
 
-**There is no hotword engine.** Adding one (Porcupine, openWakeWord) would mean
-a new dependency and, in Porcupine's case, a licence key — `CLAUDE.md` §1 and
-§10 both push back on that. So always-on mode just runs the ordinary
-listen → transcribe cycle in a loop and **discards every utterance that does not
-open with the call sign**. `WakeWordDetector` decides; `OverlayService` re-arms.
+> [!NOTE]
+> **Rewritten 2026-08-24.** This section used to say "there is no hotword
+> engine" and describe a loop that ran Whisper on every sound in the room. That
+> is no longer how it works — a real keyword-spotting cascade now runs, and the
+> costs below changed completely as a result.
+
+**There is a hotword engine, and it is three small ONNX models** shipped in
+`assets/kws/` (~3.6 MB total, committed — they fit under GitHub's limit where
+Whisper's do not). No new Gradle dependency: they run on the `onnxruntime-android`
+already present for Whisper. No licence key.
+
+```
+1280 PCM samples (80 ms, raw int16 — NOT normalised, see CLAUDE.md §9)
+      |
+melspectrogram.onnx    -> 5 frames x 32 mel bins, then (x / 10) + 2
+      |                   rolling buffer, last 76 frames (~0.8 s)
+embedding_model.onnx   -> 96-dim vector, one per 80 ms chunk
+      |                   rolling buffer, last 16 vectors (~1.28 s)
+hey_jarvis_v0.1.onnx   -> one probability, fires at >= 0.50
+```
+
+Only the third model is keyword-specific. That is what makes a custom call sign
+a data problem rather than an architecture change — see §6b.
+
+`WakeWordDetector` (the text-level check that fuzzy-matches "handsfree" in a
+transcript) still exists but is **bypassed in practice**: `handleKwsAudio()`
+sets `awaitingCommand`, and `applyWakeGate()` returns early whenever that is
+set. It is dead weight in the current flow. Do not delete it before the
+manuscript is in — it is described in `RESEARCH_DOCUMENTATION.md` §8.
 
 What that buys and what it costs:
 
 | | |
 |---|---|
-| ✅ | No new dependency, no licence, still fully offline and deterministic |
-| ✅ | Reuses the whole existing pipeline — the call sign is matched by the same Levenshtein function as everything else |
-| ⚠️ | **Whisper runs on every utterance-shaped sound in the room.** Battery and heat scale with how much talking happens nearby |
-| ⚠️ | **The microphone cycles continuously while it is on.** That is why it defaults to off and why the toggle says so |
+| ✅ | Fully offline and deterministic — same audio in, same score out, no sampling anywhere |
+| ✅ | **Whisper no longer runs on every sound in the room.** The cascade costs <3 ms per 80 ms frame; Whisper only wakes once the keyword fires |
+| ✅ | Measured 37x separation between the quietest detection and the loudest room noise (`CLAUDE.md` §9) |
+| ⚠️ | **The microphone stays open while it is on.** That is the remaining reason it defaults to off |
+| ⚠️ | The keyword is **"Hey Jarvis"**, not the app's own name |
 | ⚠️ | Latency: VAD waits ~1.5 s of silence, then inference runs. Expect a few seconds before anything happens |
 
 ### Why "Hey Google" is cheap and ours is not

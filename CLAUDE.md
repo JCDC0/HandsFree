@@ -117,7 +117,7 @@ HandsFreeAccessibilityService    gestures, global actions, text input
 | `pipeline/TranslationLayer.kt` | Lexicon normalisation. |
 | `pipeline/AudioPreprocessor.kt` | Mic capture and VAD. |
 | `pipeline/AppStateMachine.kt` | Scaffolded, **not wired**. Multi-turn context. |
-| `pipeline/KeywordSpotter.kt` | Audio-level always-on wake detector. Runs `assets/kws/hey_jarvis_v0.1.onnx` — a **pretrained openWakeWord "Hey Jarvis" model**, not one trained on "Hey HandsFree." Threshold 0.5. See §9 for the naming mismatch this creates. |
+| `pipeline/KeywordSpotter.kt` | **Working since 2026-08-24 (§9).** Three-stage ONNX wake cascade. Runs `assets/kws/hey_jarvis_v0.1.onnx` — a **pretrained openWakeWord "Hey Jarvis" model**, not one trained on "Hey HandsFree." Threshold 0.5. See §9 for the naming mismatch this creates. |
 | `pipeline/WakeWordDetector.kt` | Text-level wake gate. Fuzzy-matches Whisper's transcript against `DEFAULT_VARIANTS` ("handsfree", "hansfree", …). In `OverlayService.applyWakeGate()`, this is **bypassed** whenever `awaitingCommand` is true, which is the state `handleKwsAudio()` sets on every KWS detection — so in always-on mode the phrase that actually opens the mic is "Hey Jarvis," and this detector's variant list never runs. |
 | `service/HandsFreeAccessibilityService.kt` | Gestures, global actions, volume-key activator. |
 | `service/OverlayService.kt` | Foreground service, bubble, orchestration. |
@@ -400,11 +400,12 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
   unverified on this OEM skin
 - Tap-by-name against a real home screen with folders and emoji labels
 
-**Build identity (2026-08-18):** `versionName 1.1-tester1`, `versionCode 2`,
-`applicationId ph.edu.hau.handsfree`. The exported tester log now carries a
-`Build:` line with the git short SHA, so a report can be traced to a commit.
-**This build will not upgrade over an older install** — uninstall
-`com.example.handsfree` first, on every device. See §6.
+**Build identity (current):** `versionName 1.5.1-tester`, `versionCode 7`,
+`applicationId ph.edu.hau.handsfree`. The exported tester log carries a `Build:`
+line with the git short SHA, so a report traces to an exact commit — always
+rebuild after the final commit before copying to Drive, or the stamp reads
+`-dirty` and traces to nothing. **This build will not upgrade over a pre-1.1
+install** — uninstall `com.example.handsfree` first. See §6.
 
 **Built 2026-08-17 for the tester round, compiled but never run:** the consent
 screen, the how-to screen, the Tagalog/English display toggle, the offline
@@ -498,6 +499,36 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-08-24 (night, 2) — 1.5.1: toggle renamed, lexicon round, doc reconciliation
+- **"Call sign" renamed to "Hey Jarvis: ON/OFF"** on the toggle, and the toast
+  that fired on enabling it still said "Hey HandsFree" — the one phrase that
+  does *not* work. A label nobody can act on is worse than no label.
+- **Lexicon +11 entries** from JC's 18:0x–18:1x round, all four real failures:
+  `bak`/`tubak`/`tobak`/`go bak` -> back (Whisper renders "go back" both ways),
+  and the `pinto tin` bigram -> press (heard for "pindutin", which had sent the
+  utterance to SMART_SEARCH on the word "google"). `bak` is a whole-token key so
+  it cannot touch `bakit`, which maps to "" as a false-accept guard.
+- Verified offline before building: 25 phrases including all four failures, the
+  previously-passing cases, and the false-accept guards. **0 failures.** The
+  simulation now models `CommandExecutor`'s two reroutes (NAVIGATION_TARGETS and
+  TAP_VERBS) as well as normalise + classify — without them "press google" looks
+  like a failure when the app handles it correctly.
+- **Doc reconciliation.** Several files still described the *old* wake word:
+  - `DEV_GUIDE.md` §1 told developers to say "Hey HandsFree"; §1a opened with
+    "There is no hotword engine" and costed a design that no longer exists.
+    Both rewritten; §1a now carries the cascade diagram and the real costs.
+  - `RESEARCH_DOCUMENTATION.md` §8 described the text-level loop as the
+    implementation. Marked superseded, original retained (the transition is
+    itself a finding), and **§8a added** with the measurements, the stated
+    limitation, the determinism argument, and the three-bug engineering finding.
+  - `PROGRESS.md` still read "never spoken on the device" and "Not installed",
+    dated 2026-08-17. Status board rewritten; the Aug 13 demo checklists are
+    marked historical.
+  - `CLAUDE.md` §3 file map and the build-identity block were both stale.
+- **Still unproven and now the two oldest items:** CALL_ACCEPT has never
+  succeeded on hardware, and the log export has never been exercised end to end.
+  Both are called out at the top of `PROGRESS.md`.
 
 ### 2026-08-24 (night) — wake word fixed and working; APK 1.5
 Reverses the 2026-08-20 "ship it disabled, report as a limitation" decision, at
