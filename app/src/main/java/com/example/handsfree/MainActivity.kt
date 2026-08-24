@@ -111,6 +111,14 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     private var isSettingUp = false
 
+    /**
+     * Whether [statusText] is currently showing the missing-permissions line.
+     * Tracked as state rather than by testing the text for a "Missing" prefix:
+     * that prefix is now translated, so the old check silently stopped
+     * matching in Tagalog and the line would never have been cleared.
+     */
+    private var statusShowsMissing = false
+
     /** Clears transient error messages after a short delay. */
     private val errorClearHandler = Handler(Looper.getMainLooper())
     private val errorClearRunnable = Runnable {
@@ -601,6 +609,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         showLogButton.text = Copy.get(this, Copy.Key.BTN_SYSLOG)
         exportLogButton.text = Copy.get(this, Copy.Key.BTN_EXPORT)
         howToButton.text = Copy.get(this, Copy.Key.BTN_HOWTO)
+
+        // statusText holds computed text, not a fixed label, so it needs
+        // recomputing rather than reassigning.
+        updatePermissionStatus()
         // Only the hint follows the toggle; the transcript panes hold pipeline
         // output, which is whatever the tester actually said.
         val shown = statusText.text.toString()
@@ -722,8 +734,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                 else R.string.ui_missing_en,
                 missing.joinToString()
             )
-        } else if (statusText.text.toString().startsWith("Missing", ignoreCase = true)) {
+            statusShowsMissing = true
+        } else if (statusShowsMissing) {
             statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
+            statusShowsMissing = false
         }
     }
 
