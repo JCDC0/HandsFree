@@ -29,22 +29,31 @@ have been conflated repeatedly in this project and it has cost real time.
 | SMART_SEARCH | ✅ | ✅ + offline warning |
 | **"Hey Jarvis" call sign** (opt-in, off by default) | ✅ fixed 08-24 | ✅ **fires reliably — 0.94–0.99 against a 0.023 noise floor, 37x margin** |
 | Consent / how-to / language screens | ✅ | ✅ walked on device, both languages |
-| Log export → share sheet | ✅ | ⚠️ **not exercised end to end** |
+| Log export → share sheet | ✅ | ✅ **verified 2026-08-24 — real log exported and delivered to Drive** |
 | CALL_ACCEPT / DECLINE | ✅ repaired | ❌ **never once succeeded on hardware** |
 | SCHEDULING (alarm + timer) | ✅ repaired twice | ❌ **never once opened the Clock** |
 | MESSAGING | ⛔ classifies only | n/a — out of scope by design |
 
-### The two things still unproven
+### The one thing still unproven
 
-1. **CALL_ACCEPT.** Tested for real once, on 2026-08-12, and it failed because
-   `ANSWER_PHONE_CALLS` had never been declared. Declared and requested since,
-   but **no ringing call has been answered by voice at any point.** It needs a
-   second phone, the Phone permission granted, and someone to say "sagutin".
-   This is the oldest outstanding item in the project.
-2. **The log export.** The share sheet has never been opened on a device, and a
-   `FileProvider` misconfiguration throws at share time, not at build time.
-   Speak a few commands, tap **Export Log for Google Form**, confirm the file
-   opens and is readable.
+**CALL_ACCEPT.** Tested for real once, on 2026-08-12, and it failed because
+`ANSWER_PHONE_CALLS` had never been declared. Declared and requested since, but
+**no ringing call has been answered by voice at any point.** It needs a second
+phone, the Phone permission granted, and someone to say "sagutin". This is now
+the oldest outstanding item in the project and the only demo feature with no
+evidence behind it.
+
+### Log export — verified 2026-08-24
+
+A real log was exported on device and delivered to Drive
+(`handsfree-log-20260824-184817.txt`, 11 entries, 3.1 KB). The `FileProvider`
+path works, the file is readable, and its contents match what the privacy screen
+promises: command text only, no audio, no identifiers. The header carried the
+build stamp, display language, mic-window setting and permission states, so a
+returned log is traceable without asking the tester anything.
+
+This was the last blocking unknown for the tester round. Forms aside, the
+collection loop is proven end to end.
 
 Everything else is lexicon work, which is endless. Task list: `DEV_GUIDE.md` §6.
 

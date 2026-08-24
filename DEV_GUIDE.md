@@ -215,21 +215,50 @@ Filipino builds phone verbs predictably, so add entries in families:
 
 ## 5. Verify before you build
 
-There is a throwaway simulator that replays phrases through the same logic
-without a device round-trip. Rebuild it in ~40 lines of Node from
-`TranslationLayer.normalize()` and `LevenshteinMatcher.classify()`, or just
-reason it through by hand. What matters is that you check three things for
-every phrase you touch:
+Replay phrases through the same logic without a device round-trip. ~60 lines of
+Python or Node reading the two JSON assets directly. Check four things for every
+phrase you touch:
 
 - does it normalise to clean English?
 - does it match the intent you expect?
 - does any **other** intent tie with it at the same distance?
+- **would `CommandExecutor` reroute it anyway?**
 
-The last one is the one that bites.
+The third is the one that bites. The fourth is the one that makes you *think*
+something is broken when it is not.
+
+> [!IMPORTANT]
+> **Model `CommandExecutor.execute()`'s two reroutes, not just normalise +
+> classify.** On 2026-08-24 "pinto tin ang google" normalised to "press google",
+> which ties NAVIGATION `press` and SMART_SEARCH `google` at distance 0 — it
+> reads as a failure at the classify stage. The app handles it correctly,
+> because `execute()` reroutes to NAVIGATION when the utterance opens with a tap
+> verb. A simulator that stops at `classify()` reports a bug that does not
+> exist, and someone then "fixes" a working path.
+>
+> The two rules to copy:
+> - **APP_LAUNCH** whose argument starts with `home`/`back`/`recents`/
+>   `notifications` -> NAVIGATION
+> - **anything not already NAVIGATION** whose utterance starts with
+>   `press on`/`tap on`/`press`/`click`/`select` -> NAVIGATION
 
 ---
 
 ## 6. What still needs doing
+
+> [!NOTE]
+> **Log export: offer "save to file" alongside "share".** Reported by JC after
+> the first real export, 2026-08-24. The export currently hands the file to the
+> Android share sheet (`ACTION_SEND` + chooser), so the tester picks an app to
+> send it *to*. Some testers will want to save it locally first and upload it
+> themselves later — that is `ACTION_CREATE_DOCUMENT` (Storage Access Framework),
+> which opens a file-picker to choose a destination, and would sit next to the
+> existing button rather than replacing it.
+>
+> **Do not build this before Aug 28.** The export is verified working end to end
+> as of 1.5.1 and the tester round depends on it; changing the one path that is
+> proven, days before submission, to add a second convenience is the wrong trade.
+> Recorded here so it is not lost.
 
 Ordered. Anything below the line is post-demo.
 

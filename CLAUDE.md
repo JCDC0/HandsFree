@@ -500,6 +500,30 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-08-24 (night, 3) — log export verified on device. Docs only, no code.
+- **The export works end to end.** JC exported a real log on device and
+  delivered it to Drive: `handsfree-log-20260824-184817.txt`, 11 entries,
+  3.1 KB. `FileProvider` path fine, file readable, contents exactly what the
+  privacy screen promises — command text only, no audio, no identifiers. The
+  header carried build stamp, display language, mic-window setting and
+  permission states, so a returned log is traceable without asking the tester
+  anything. **This was the last blocking unknown for the tester round.**
+- **Noted, deliberately not built:** the export uses the share sheet
+  (`ACTION_SEND`) rather than a save-to-file dialog
+  (`ACTION_CREATE_DOCUMENT`). JC asked for it to be recorded rather than
+  changed — the one proven path should not be touched days before submission
+  to add a convenience. `DEV_GUIDE.md` §6.
+- **The phone and the Drive APK do not carry the same stamp.** The export
+  header reads `aeee337-dirty`; the Drive APK is `ff7b9ad`. The *code is
+  identical* — `installDebug` ran after the 1.5.1 edits but before the commit,
+  so the phone got an uncommitted-tree build. Nothing is wrong with the app,
+  but a bug reported from that phone traces to no commit. §6's warning applies
+  to `installDebug` during development, not just to the Drive copy.
+- `DEV_GUIDE.md` §5 rewritten: the verification simulator must model
+  `CommandExecutor`'s two reroutes, not just normalise + classify. Stopping at
+  `classify()` reports failures that are not failures — "press google" being
+  the case that caught this — and the next person then "fixes" a working path.
+
 ### 2026-08-24 (night, 2) — 1.5.1: toggle renamed, lexicon round, doc reconciliation
 - **"Call sign" renamed to "Hey Jarvis: ON/OFF"** on the toggle, and the toast
   that fired on enabling it still said "Hey HandsFree" — the one phrase that
