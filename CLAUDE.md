@@ -513,6 +513,48 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-08-24 (later) — mic-open cap made adjustable, default 4s; APK 1.3
+The 1.2 change (trailing silence 1.47s -> 1.02s) fixed the wrong number for the
+symptom testers actually reported. A tester spoke a command, went silent, and
+still waited out the full window. That is `LISTEN_WINDOW_MS`, the 8s cap — and
+the cap only applies when the VAD *fails*, which is exactly when the wait is
+worst and most visible.
+
+- **Two ways the VAD never ends an utterance**, both landing on the full window:
+  1. Room noise never drops below `VAD_THRESHOLD` (300 RMS), so `silentChunks`
+     keeps resetting.
+  2. The speaker is quiet enough that no chunk ever *exceeds* the threshold, so
+     `hasHeardSpeech` is never set and the silence counter is never armed at
+     all. Whisper still transcribes them fine afterwards — every chunk is
+     passed through regardless of the VAD — so to the tester the app clearly
+     heard them and simply chose to wait. **This matches the report exactly.**
+- **`LISTEN_WINDOW_MS` replaced by a preference**, default **4s**, adjustable
+  3–10s from a slider on the debug screen. `OverlayService.listenWindowMs()`
+  re-reads it on every activation, so the slider takes effect on the next
+  command with no restart.
+- **Adjustable rather than just hardcoded lower** because the right value
+  depends on how quickly a person starts speaking after activating, which we
+  have no data on. The chosen value goes into the exported log header, so the
+  tester round produces that data instead of us guessing twice.
+- **`stopListening()`'s reason now goes to `CrashLog`**, so the *exported* log
+  — not just logcat — shows per utterance whether it ended on trailing silence
+  or sat out the whole window, and the timeout path names the window length.
+  That is the evidence needed to pick a final value and to tell case 1 from
+  case 2, across testers who cannot be asked to run `adb`.
+- `SILENCE_CHUNKS` deliberately left at 16 (~1.02s). A 512ms option was
+  discussed and not taken; the two are independent and this addressed the
+  actual complaint.
+- Doc fix in `AudioPreprocessor`: the KDoc claimed `callback` fired only for
+  chunks above the VAD threshold. It fires unconditionally — chunk-dropping was
+  removed on 2026-08-12 because packing non-silent audio made Whisper
+  hallucinate. §4 rule 2: the code was right, the comment was wrong.
+- Verified on device 144512558D105352: slider renders in Tagalog, defaults to
+  4s, moving it updates the label and persists (`listen_window_seconds`).
+  **Still not verified by voice** — that needs someone to speak a command and
+  time it.
+- Drive: `HandsFree-1.3-tester.apk` live (`BUILD_STAMP a8f2be9`); 1.2 moved to
+  `_ARCHIVE/2026-08-24_tester-build-1.2_SUPERSEDED-by-1.3-adjustable-mic-window.apk`.
+
 ### 2026-08-24 — faster hand-off to inference; tester APK 1.2
 - **Trailing silence 1.47s -> 1.02s.** `AudioPreprocessor`'s VAD waited 23
   chunks x 64ms after speech stopped before declaring the utterance over. Now
