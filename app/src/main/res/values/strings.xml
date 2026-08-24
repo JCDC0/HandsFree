@@ -79,6 +79,11 @@
     <string name="export_empty_tl">Wala pang command na na-record. Subukan muna ang ilang utos bago mag-export.</string>
     <string name="export_empty_en">No commands recorded yet. Try a few commands before exporting.</string>
 
+    <string name="listen_window_label_tl">Haba ng bukas na mikropono</string>
+    <string name="listen_window_label_en">Microphone open time</string>
+    <string name="listen_window_hint_tl">Ito ang pinakamatagal na maghihintay bago mag-transcribe, kapag hindi niya mahalata na tapos na kayong magsalita. Karaniwan ay mas maaga itong huminto.</string>
+    <string name="listen_window_hint_en">The longest it waits before transcribing, when it cannot tell that you have stopped speaking. Normally it stops sooner than this.</string>
+
     <string name="activator_hint_tl">Handa na. Gamitin ang accessibility shortcut — i-tap ang floating accessibility button, o pindutin nang sabay ang dalawang volume keys ng 3 segundo — para mag-utos.</string>
     <string name="activator_hint_en">Ready. Use the accessibility shortcut — tap the floating accessibility button, or hold both volume keys for 3 seconds — to give a command.</string>
 

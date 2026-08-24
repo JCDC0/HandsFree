@@ -242,6 +242,51 @@
             android:textColor="@color/hf_button_neutral_text"
             android:layout_marginBottom="10dp" />
 
+        <!-- Mic-open cap. Only bites when the VAD cannot tell the speaker
+             stopped; a normal command ends on trailing silence well before it.
+             Exposed because the right value depends on how fast a person starts
+             talking after activating, and we have no data on that yet. -->
+        <androidx.cardview.widget.CardView
+            xmlns:card_view="http://schemas.android.com/apk/res-auto"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            card_view:cardCornerRadius="12dp"
+            card_view:cardElevation="2dp"
+            card_view:cardBackgroundColor="@color/hf_card"
+            android:layout_marginBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/listen_window_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/hf_text_primary" />
+
+                <TextView
+                    android:id="@+id/listen_window_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="12sp"
+                    android:textColor="@color/hf_text_label"
+                    android:layout_marginTop="4dp" />
+
+                <SeekBar
+                    android:id="@+id/listen_window_seek"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
         <Button
             android:id="@+id/perm_button"
             android:layout_width="match_parent"

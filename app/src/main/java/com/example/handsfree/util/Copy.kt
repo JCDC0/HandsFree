@@ -60,7 +60,10 @@ object Copy {
         EXPORT_CHOOSER(R.string.export_chooser_tl, R.string.export_chooser_en),
         EXPORT_EMPTY(R.string.export_empty_tl, R.string.export_empty_en),
 
-        ACTIVATOR_HINT(R.string.activator_hint_tl, R.string.activator_hint_en)
+        ACTIVATOR_HINT(R.string.activator_hint_tl, R.string.activator_hint_en),
+
+        LISTEN_WINDOW_LABEL(R.string.listen_window_label_tl, R.string.listen_window_label_en),
+        LISTEN_WINDOW_HINT(R.string.listen_window_hint_tl, R.string.listen_window_hint_en)
     }
 
     private const val PREFS = "handsfree_prefs"

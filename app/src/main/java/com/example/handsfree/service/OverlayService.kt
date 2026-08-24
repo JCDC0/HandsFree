@@ -98,7 +98,7 @@ class OverlayService : Service() {
     private val sleepRunnable = Runnable {
         if (listening) {
             Log.i(TAG, "listening window elapsed — returning to idle")
-            stopListening("Timed out")
+            stopListening("Timed out after ${listenWindowMs() / 1000}s — VAD never fired")
         }
     }
 
@@ -213,8 +213,25 @@ class OverlayService : Service() {
         updateBubble("●", 0xFFE53935.toInt())
         startCaptureIfNeeded()
         mainHandler.removeCallbacks(sleepRunnable)
-        mainHandler.postDelayed(sleepRunnable, LISTEN_WINDOW_MS)
+        mainHandler.postDelayed(sleepRunnable, listenWindowMs())
     }
+
+    /**
+     * How long the mic stays open when the VAD never decides the utterance
+     * ended. Read from preferences on every activation rather than cached, so
+     * moving the slider takes effect on the next command with no restart.
+     *
+     * This is a *cap*, not a wait: a normal command ends on trailing silence
+     * long before it. It only bites when the VAD cannot tell you stopped —
+     * either the room stayed above `AudioPreprocessor`'s VAD_THRESHOLD, or the
+     * speaker was quiet enough that speech never registered at all, in which
+     * case the silence counter is never even armed. Testers hit that second
+     * case and sat through the entire window in silence.
+     */
+    private fun listenWindowMs(): Long =
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getInt(PREF_LISTEN_WINDOW_S, DEFAULT_LISTEN_WINDOW_S)
+            .coerceIn(MIN_LISTEN_WINDOW_S, MAX_LISTEN_WINDOW_S) * 1000L
 
     private fun stopListening(reason: String) {
         if (!listening) return
@@ -224,6 +241,10 @@ class OverlayService : Service() {
         emitStatus(STATUS_IDLE)
         updateBubble("🎤", 0xFF1E88E5.toInt())
         Log.i(TAG, "stopped listening: $reason")
+        // Into the exported log, not just logcat. Across 15-20 testers this
+        // is what separates "the VAD worked" from "we sat out the whole
+        // window", and no tester can be asked to run adb.
+        CrashLog.info(this, "listening ended: $reason")
         flushWhisperUtterance()
         checkStopCapture()
     }
@@ -749,8 +770,26 @@ class OverlayService : Service() {
         private const val LEXICON_FILE = "translation-lexicon.json"
         private const val VOCAB_FILE = "intent-vocabulary.json"
 
-        /** How long the mic stays open after activation. */
-        private const val LISTEN_WINDOW_MS = 8000L
+        /**
+         * Mic-open cap, in seconds, adjustable by the tester from the debug
+         * screen. Was a hardcoded 8s.
+         *
+         * Default lowered to 4 after a tester reported speaking a command,
+         * falling silent, and still waiting out the whole window before
+         * anything happened. 8s was picked as a safe upper bound back when the
+         * VAD was assumed to always fire; it is the *worst* case that testers
+         * actually feel, so it is the one that matters.
+         *
+         * Kept adjustable rather than just hardcoded lower, because the right
+         * value depends on how quickly a person starts speaking after
+         * activating and we have no data on that. The chosen value is written
+         * into the exported log, so the tester round produces that data.
+         */
+        const val PREF_LISTEN_WINDOW_S = "listen_window_seconds"
+        const val DEFAULT_LISTEN_WINDOW_S = 4
+        const val MIN_LISTEN_WINDOW_S = 3
+        const val MAX_LISTEN_WINDOW_S = 10
+        private const val PREFS = "handsfree_prefs"
 
         /**
          * Entries kept in the transcript log, newest first. Every one is a few

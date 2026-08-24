@@ -64,6 +64,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var warningCard: View
     private lateinit var warningText: TextView
 
+    private lateinit var listenWindowLabel: TextView
+    private lateinit var listenWindowHint: TextView
+    private lateinit var listenWindowSeek: android.widget.SeekBar
+
     private lateinit var showHistoryButton: Button
 
     /**
@@ -288,6 +292,11 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         wakeWordOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_WAKE_WORD, false)
         updateWakeWordButton()
         wakeWordButton.setOnClickListener { toggleWakeWord() }
+
+        listenWindowLabel = findViewById(R.id.listen_window_label)
+        listenWindowHint = findViewById(R.id.listen_window_hint)
+        listenWindowSeek = findViewById(R.id.listen_window_seek)
+        setUpListenWindow()
 
         exportLogButton.setOnClickListener { confirmExport() }
         howToButton.setOnClickListener { showHowTo(continueAfter = false) }
@@ -553,6 +562,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
 
     private fun applyLanguage() {
         updateLanguageButton()
+        renderListenWindow()
         // Only the hint follows the toggle; the transcript panes hold pipeline
         // output, which is whatever the tester actually said.
         val shown = statusText.text.toString()
@@ -868,6 +878,57 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         )
     }
 
+    // ---- mic-open cap ----
+
+    /**
+     * Slider for [OverlayService.PREF_LISTEN_WINDOW_S].
+     *
+     * This is the cap on how long the mic stays open when the VAD never works
+     * out that the speaker stopped — not a delay every command pays. A normal
+     * command ends on trailing silence well before it. It was a hardcoded 8s,
+     * and a tester sat through the whole of it in silence after finishing a
+     * command, which is what prompted exposing it.
+     *
+     * The SeekBar is 0-based, so progress maps to seconds by adding MIN.
+     */
+    private fun setUpListenWindow() {
+        listenWindowSeek.max = OverlayService.MAX_LISTEN_WINDOW_S - OverlayService.MIN_LISTEN_WINDOW_S
+        listenWindowSeek.progress = listenWindowSeconds() - OverlayService.MIN_LISTEN_WINDOW_S
+        renderListenWindow()
+
+        listenWindowSeek.setOnSeekBarChangeListener(
+            object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    bar: android.widget.SeekBar, progress: Int, fromUser: Boolean
+                ) {
+                    // Persist as it moves. OverlayService re-reads the pref on
+                    // every activation, so there is nothing to notify and no
+                    // restart needed — the next command uses the new value.
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                        .putInt(
+                            OverlayService.PREF_LISTEN_WINDOW_S,
+                            progress + OverlayService.MIN_LISTEN_WINDOW_S
+                        ).apply()
+                    renderListenWindow()
+                }
+
+                override fun onStartTrackingTouch(bar: android.widget.SeekBar) {}
+                override fun onStopTrackingTouch(bar: android.widget.SeekBar) {}
+            }
+        )
+    }
+
+    private fun listenWindowSeconds(): Int =
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getInt(OverlayService.PREF_LISTEN_WINDOW_S, OverlayService.DEFAULT_LISTEN_WINDOW_S)
+            .coerceIn(OverlayService.MIN_LISTEN_WINDOW_S, OverlayService.MAX_LISTEN_WINDOW_S)
+
+    private fun renderListenWindow() {
+        listenWindowLabel.text =
+            "⏱ ${Copy.get(this, Copy.Key.LISTEN_WINDOW_LABEL)}: ${listenWindowSeconds()}s"
+        listenWindowHint.text = Copy.get(this, Copy.Key.LISTEN_WINDOW_HINT)
+    }
+
     // ---- log export ----
 
     /**
@@ -962,6 +1023,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             appendLine("Accessibility: ${if (isAccessibilityServiceEnabled()) "on" else "OFF"}")
             appendLine("Phone perm   : ${if (hasAnswerCallPermission()) "granted" else "DENIED"}")
             appendLine("Call sign    : ${if (wakeWordOn) "on" else "off"}")
+            // The tester's own choice of mic-open cap. Recorded because we
+            // have no data on the right value and this round is how we get it.
+            appendLine("Mic window   : ${listenWindowSeconds()}s")
             appendLine("Entries      : ${history.size} of ${OverlayService.HISTORY_LIMIT}")
             appendLine()
             appendLine("PRIVACY: command text only. No audio is recorded or stored at any")
