@@ -64,6 +64,12 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var warningCard: View
     private lateinit var warningText: TextView
 
+    private lateinit var subtitleText: TextView
+    private lateinit var statusLabel: TextView
+    private lateinit var transcribedLabel: TextView
+    private lateinit var translatedLabel: TextView
+    private lateinit var intentLabel: TextView
+
     private lateinit var listenWindowLabel: TextView
     private lateinit var listenWindowHint: TextView
     private lateinit var listenWindowSeek: android.widget.SeekBar
@@ -232,7 +238,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     }
 
     private fun updateWakeWordButton() {
-        wakeWordButton.text = if (wakeWordOn) "👂 Call sign: ON" else "👂 Call sign: OFF"
+        wakeWordButton.text = Copy.get(
+            this,
+            if (wakeWordOn) Copy.Key.BTN_CALLSIGN_ON else Copy.Key.BTN_CALLSIGN_OFF
+        )
         wakeWordButton.backgroundTintList = ColorStateList.valueOf(
             themed(if (wakeWordOn) R.color.hf_toggle_on_bg else R.color.hf_button_neutral_bg)
         )
@@ -293,6 +302,11 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         updateWakeWordButton()
         wakeWordButton.setOnClickListener { toggleWakeWord() }
 
+        subtitleText = findViewById(R.id.subtitle_text)
+        statusLabel = findViewById(R.id.status_label)
+        transcribedLabel = findViewById(R.id.transcribed_label)
+        translatedLabel = findViewById(R.id.translated_label)
+        intentLabel = findViewById(R.id.intent_label)
         listenWindowLabel = findViewById(R.id.listen_window_label)
         listenWindowHint = findViewById(R.id.listen_window_hint)
         listenWindowSeek = findViewById(R.id.listen_window_seek)
@@ -301,7 +315,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         exportLogButton.setOnClickListener { confirmExport() }
         howToButton.setOnClickListener { showHowTo(continueAfter = false) }
         languageButton.setOnClickListener { toggleLanguage() }
-        updateLanguageButton()
+        applyLanguage()
 
         // Load LevenshteinMatcher for intent display in the debug UI
         levenshteinMatcher = runCatching {
@@ -316,7 +330,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
         statusText.setTextColor(themed(R.color.hf_text_primary))
         pipelineActive = false
-        startButton.text = "Start Listening"
+        setStartButtonLabel(running = false)
         startButton.isEnabled = true
 
         startButton.setOnClickListener {
@@ -344,7 +358,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         }
 
         showHistoryButton.setOnClickListener {
-            val history = if (OverlayService.transcriptHistory.isEmpty()) "No history recorded yet." else OverlayService.transcriptHistory.joinToString("\n\n---\n\n")
+            val history = if (OverlayService.transcriptHistory.isEmpty()) Copy.get(this, Copy.Key.HISTORY_EMPTY) else OverlayService.transcriptHistory.joinToString("\n\n---\n\n")
             val scrollView = android.widget.ScrollView(this)
             val textView = TextView(this).apply {
                 text = history
@@ -354,16 +368,16 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             scrollView.addView(textView)
 
             AlertDialog.Builder(this)
-                .setTitle("Transcript History (Last ${OverlayService.HISTORY_LIMIT})")
+                .setTitle("${Copy.get(this, Copy.Key.DLG_HISTORY)} (${OverlayService.HISTORY_LIMIT})")
                 .setView(scrollView)
-                .setNeutralButton("Copy to Clipboard") { _, _ ->
+                .setNeutralButton(Copy.get(this, Copy.Key.DLG_COPY)) { _, _ ->
                     val clipboard = getSystemService(ClipboardManager::class.java)
                     clipboard?.setPrimaryClip(
                         ClipData.newPlainText("HandsFree Transcript History", history)
                     )
-                    Toast.makeText(this, "History copied to clipboard", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, Copy.get(this, Copy.Key.COPIED), Toast.LENGTH_SHORT).show()
                 }
-                .setPositiveButton("Close", null)
+                .setPositiveButton(Copy.get(this, Copy.Key.DLG_CLOSE), null)
                 .show()
         }
 
@@ -378,16 +392,16 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             scrollView.addView(textView)
 
             AlertDialog.Builder(this)
-                .setTitle("System Log")
+                .setTitle(Copy.get(this, Copy.Key.DLG_SYSLOG))
                 .setView(scrollView)
-                .setNeutralButton("Copy to Clipboard") { _, _ ->
+                .setNeutralButton(Copy.get(this, Copy.Key.DLG_COPY)) { _, _ ->
                     val clipboard = getSystemService(ClipboardManager::class.java)
                     clipboard?.setPrimaryClip(
                         ClipData.newPlainText("HandsFree crash log", log)
                     )
-                    Toast.makeText(this, "Log copied to clipboard", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, Copy.get(this, Copy.Key.COPIED), Toast.LENGTH_SHORT).show()
                 }
-                .setPositiveButton("Close", null)
+                .setPositiveButton(Copy.get(this, Copy.Key.DLG_CLOSE), null)
                 .show()
         }
     }
@@ -463,7 +477,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             showSetupGuide(missing)
         } else if (isSettingUp) {
             isSettingUp = false
-            Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Copy.get(this, Copy.Key.SETUP_DONE), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -560,9 +574,33 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         Toast.makeText(this, "🌐 ${next.label}", Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * Repaint every visible label in the tester's chosen language.
+     *
+     * The debug screen used to be permanently half-Tagalog — "Narinig, Salin &
+     * Intent Log" stayed put whichever language you picked — so the toggle
+     * looked broken to anyone who used it. The layout now ships these blank
+     * and this is the only place that fills them, which means a missed one
+     * shows up as an empty control rather than as stale text in the wrong
+     * language that nobody notices.
+     */
     private fun applyLanguage() {
         updateLanguageButton()
         renderListenWindow()
+
+        subtitleText.text = Copy.get(this, Copy.Key.SUBTITLE)
+        statusLabel.text = Copy.get(this, Copy.Key.CARD_STATUS)
+        transcribedLabel.text = Copy.get(this, Copy.Key.CARD_HEARD)
+        translatedLabel.text = Copy.get(this, Copy.Key.CARD_TRANSLATED)
+        intentLabel.text = Copy.get(this, Copy.Key.CARD_INTENT)
+
+        setStartButtonLabel(running = pipelineActive)
+        updateWakeWordButton()
+        permButton.text = Copy.get(this, Copy.Key.BTN_ACCESSIBILITY)
+        showHistoryButton.text = Copy.get(this, Copy.Key.BTN_HISTORY)
+        showLogButton.text = Copy.get(this, Copy.Key.BTN_SYSLOG)
+        exportLogButton.text = Copy.get(this, Copy.Key.BTN_EXPORT)
+        howToButton.text = Copy.get(this, Copy.Key.BTN_HOWTO)
         // Only the hint follows the toggle; the transcript panes hold pipeline
         // output, which is whatever the tester actually said.
         val shown = statusText.text.toString()
@@ -679,7 +717,11 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private fun updatePermissionStatus() {
         val missing = missingSetup().toMutableList()
         if (missing.isNotEmpty()) {
-            statusText.text = "Missing: ${missing.joinToString()} — grant before starting"
+            statusText.text = getString(
+                if (Copy.lang(this) == Copy.Lang.TL) R.string.ui_missing_tl
+                else R.string.ui_missing_en,
+                missing.joinToString()
+            )
         } else if (statusText.text.toString().startsWith("Missing", ignoreCase = true)) {
             statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
         }
@@ -711,7 +753,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             startService(intent)
         }
         pipelineActive = true
-        startButton.text = "Stop Listening"
+        setStartButtonLabel(running = true)
         startButton.isEnabled = false // re-enabled once LISTENING fires
         Toast.makeText(this, "Pipeline starting...", Toast.LENGTH_SHORT).show()
         statusText.text = "PREPARING"
@@ -725,7 +767,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         }
         startService(intent)
         pipelineActive = false
-        startButton.text = "Start Listening"
+        setStartButtonLabel(running = false)
         transcribedText.text = "..."
         translatedText.text = "..."
     }
@@ -771,15 +813,15 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     warningCard.visibility = View.GONE
                     hideLoading()
                     startButton.isEnabled = true
-                    startButton.text = "Stop Listening"
+                    setStartButtonLabel(running = true)
                     pipelineActive = true
                     statusText.setTextColor(themed(R.color.hf_status_active))
-                    statusText.text = "Listening — speak your command"
+                    statusText.text = Copy.get(this, Copy.Key.STATUS_LISTENING)
                 }
                 "STOPPED", "IDLE" -> {
                     hideLoading()
                     startButton.isEnabled = true
-                    startButton.text = "Start Listening"
+                    setStartButtonLabel(running = false)
                     pipelineActive = false
                     statusText.setTextColor(themed(R.color.hf_text_primary))
                     statusText.text = Copy.get(this, Copy.Key.ACTIVATOR_HINT)
@@ -787,7 +829,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                 "MODEL_ERROR" -> {
                     hideLoading()
                     startButton.isEnabled = true
-                    startButton.text = "Start Listening"
+                    setStartButtonLabel(running = false)
                     pipelineActive = false
                     statusText.setTextColor(themed(R.color.hf_status_error))
                 }
@@ -825,7 +867,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             hideLoading()
             pipelineActive = false
             startButton.isEnabled = true
-            startButton.text = "Start Listening"
+            setStartButtonLabel(running = false)
             statusText.setTextColor(themed(R.color.hf_status_error))
             statusText.text = message
         }
@@ -834,31 +876,31 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private fun showSetupGuide(missing: List<String>) {
         if (missing.isEmpty()) {
             isSettingUp = false
-            Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, Copy.get(this, Copy.Key.SETUP_DONE), Toast.LENGTH_SHORT).show()
             return
         }
         
         isSettingUp = true
 
-        val message = StringBuilder("Please enable the following:\n\n")
+        val message = StringBuilder(Copy.get(this, Copy.Key.SETUP_INTRO) + "\n\n")
         if ("OVERLAY" in missing) {
-            message.append("• Display over other apps (needed for the floating microphone bubble)\n")
+            message.append(Copy.get(this, Copy.Key.SETUP_OVERLAY) + "\n")
         }
         if ("ACCESSIBILITY" in missing) {
-            message.append("• Accessibility Service (needed to click on things for you and read the screen)\n")
+            message.append(Copy.get(this, Copy.Key.SETUP_A11Y) + "\n")
         }
         if ("RECORD_AUDIO" in missing) {
-            message.append("• Record Audio (needed to hear your commands)\n")
+            message.append(Copy.get(this, Copy.Key.SETUP_MIC) + "\n")
         }
         if ("PHONE" in missing) {
-            message.append("• Phone (needed to answer or reject calls by voice)\n")
+            message.append(Copy.get(this, Copy.Key.SETUP_PHONE) + "\n")
         }
 
         showFlowDialog(
             AlertDialog.Builder(this)
-            .setTitle("Setup Required")
+            .setTitle(Copy.get(this, Copy.Key.SETUP_TITLE))
             .setMessage(message.toString().trim())
-            .setPositiveButton("Next Step") { _, _ ->
+            .setPositiveButton(Copy.get(this, Copy.Key.SETUP_NEXT)) { _, _ ->
                 when {
                     "OVERLAY" in missing -> {
                         val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
@@ -874,8 +916,14 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                     "PHONE" in missing -> requestCallPermission()
                 }
             }
-            .setNegativeButton("Cancel") { _, _ -> isSettingUp = false }
+            .setNegativeButton(Copy.get(this, Copy.Key.SETUP_CANCEL)) { _, _ -> isSettingUp = false }
         )
+    }
+
+    /** Start/stop label, in the chosen language. */
+    private fun setStartButtonLabel(running: Boolean) {
+        startButton.text =
+            Copy.get(this, if (running) Copy.Key.BTN_STOP else Copy.Key.BTN_START)
     }
 
     // ---- mic-open cap ----

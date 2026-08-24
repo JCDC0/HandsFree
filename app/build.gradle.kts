@@ -48,8 +48,8 @@ android {
         applicationId = "ph.edu.hau.handsfree"
         minSdk = 30
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3-tester"
+        versionCode = 5
+        versionName = "1.4-tester"
 
         // Printed in the exported tester log. See MainActivity.buildReport().
         buildConfigField("String", "BUILD_STAMP", "\"${gitStamp()}\"")
