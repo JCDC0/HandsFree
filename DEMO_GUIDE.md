@@ -1,5 +1,14 @@
 # Demo Guide — Adviser, Thursday Aug 13
 
+> [!NOTE]
+> **HISTORICAL — the Aug 13 demo has happened.** Kept for the record and because
+> the fallback reasoning is still useful for the defence. Two things in here are
+> now out of date: the app is `1.5.1-tester`, not the Aug 13 build, and §6 tells
+> you to leave the call sign off because it had never been spoken on a device.
+> **It works now** — see `CLAUDE.md` §9. It is still off by default, which for a
+> live demo is still the right setting, but the reason has changed.
+> Current status board: `PROGRESS.md`.
+
 Read this the night before and once again in the morning. Everything here is
 decided in advance so nothing has to be improvised in the room.
 
