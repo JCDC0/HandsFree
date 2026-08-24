@@ -382,6 +382,75 @@ and the next speaker will produce a tenth.
 
 ---
 
+## 6b. Training a real "Hey HandsFree" — future work, NOT before Aug 28
+
+> [!WARNING]
+> **Do not start this before the manuscript is submitted.** The call sign works
+> today with a borrowed keyword. Replacing it is a data-collection job with a
+> training loop attached, and the failure mode is a detector that fires on
+> nothing or on everything — either of which costs more than the naming
+> awkwardness it fixes. Written down so it is not re-derived from scratch.
+
+### What is actually running now
+
+Three tiny ONNX models in a cascade, ~3.6 MB total, on every 80 ms of audio:
+
+```
+1280 PCM samples (80 ms, raw int16)
+      |
+melspectrogram.onnx      -> 5 frames x 32 mel bins,  then (x / 10) + 2
+      |                     rolling buffer of the last 76 frames (~0.8 s)
+embedding_model.onnx     -> 96-dim vector, one per 80 ms chunk
+      |                     rolling buffer of the last 16 vectors (~1.28 s)
+hey_jarvis_v0.1.onnx     -> single probability, fires at >= 0.50
+```
+
+The first two are **generic and reusable** — a mel front end and a speech
+feature extractor, neither of which knows what a keyword is. Only the third
+model, ~1.2 MB, is specific to "Hey Jarvis": a small classifier over a 1.28 s
+window of those 96-dim features, answering one yes/no question.
+
+That split is the whole point. Recognising *any* Filipino sentence needs
+Whisper's 37.8M parameters and ~2 s of decode. Recognising *one fixed phrase*
+needs a binary classifier over pre-extracted features and costs under 3 ms. It
+is cheap enough to run continuously, which is what makes always-on possible at
+all — see §1a for the battery arithmetic.
+
+### What replacing it would take
+
+Only the third stage changes. The mel and embedding models stay exactly as they
+are, which is what makes this tractable at all.
+
+1. **Collect "Hey HandsFree" recordings.** openWakeWord's own training notebook
+   uses synthetic speech (Piper TTS) for the positive class — hundreds to
+   thousands of utterances across many synthetic voices — rather than recording
+   humans. For a Filipino-accented call sign, mixing in real recordings from the
+   four of us plus testers would matter more than raw count.
+2. **Collect negatives.** Far more important than positives, and the usual
+   reason a custom wake word is unusable. It needs hours of speech that is *not*
+   the call sign, ideally including Tagalog — the app is used by people speaking
+   Tagalog all day, so Tagalog is the negative distribution that counts. Public
+   noise/speech corpora plus the team's own recordings.
+3. **Augment**: room impulse responses, background noise, varying SNR.
+4. **Train the classifier only**, on features produced by the *same* mel and
+   embedding models bundled here, then export to ONNX.
+5. **Drop the file into `assets/kws/`** and change `WAKEWORD_MODEL`. Nothing
+   else in `KeywordSpotter` changes — the contract is identical.
+6. **Measure both directions** on held-out data: detection rate, and false
+   accepts per hour of ordinary Tagalog speech. Report both. A wake word with
+   an unmeasured false-accept rate is not a result.
+
+### If someone tries anyway, read this first
+
+Every one of the three bugs that kept this broken for two sessions was a place
+where **the code's comments disagreed with the model file**. Do not trust either
+in isolation. Load the `.onnx` with `onnxruntime` in Python, read the real
+input/output signatures, build a reference cascade, and make the Kotlin match
+its numbers. That method found all three in under an hour after two sessions of
+reasoning about the code alone. See `CLAUDE.md` §9.
+
+---
+
 ## 7. Handing a log to your own AI
 
 Paste this with the repo open in Claude Code / Cursor / whatever you use:
