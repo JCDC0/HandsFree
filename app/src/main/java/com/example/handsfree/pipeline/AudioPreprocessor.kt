@@ -96,7 +96,7 @@ class AudioPreprocessor(private val context: Context? = null) {
             captureJob = scope.launch {
                 val buffer = ShortArray(CHUNK_FRAMES)
                 var silentChunks = 0
-                val silenceThresholdChunks = 23 // ~1.5s at 64ms/chunk
+                val silenceThresholdChunks = SILENCE_CHUNKS
                 var hasHeardSpeech = false
 
                 while (isActive && isCapturing) {
@@ -205,5 +205,22 @@ class AudioPreprocessor(private val context: Context? = null) {
         // typically reads ~30-100 on handheld devices; speech reads ~1000+.
         // Tunable — lower to capture quieter speech, raise to filter noisier rooms.
         private const val VAD_THRESHOLD = 300
+
+        /**
+         * Chunks of trailing silence before the utterance is considered over
+         * and handed to the recogniser. 16 x 64ms = ~1.02s.
+         *
+         * Was 23 (~1.47s). Testers reported the wait after speaking felt long,
+         * and this is the only part of that wait we control cheaply: Whisper
+         * pads every utterance to a fixed 30s window, so inference costs the
+         * same ~2s no matter how briefly you spoke (see CLAUDE.md 5).
+         *
+         * Do not push this much below ~1s. It is the pause budget a speaker
+         * gets mid-sentence, and Tagalog command phrasing puts real pauses
+         * inside an utterance ("buksan mo ang ... YouTube"). Too low and the
+         * recogniser is handed half a command, which reads as a lexicon
+         * failure in the transcript log and costs far more than the 0.45s.
+         */
+        private const val SILENCE_CHUNKS = 16
     }
 }
