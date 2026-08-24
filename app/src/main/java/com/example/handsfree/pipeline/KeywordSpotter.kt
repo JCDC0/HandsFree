@@ -88,16 +88,22 @@ class KeywordSpotter(context: Context, private val threshold: Float = DEFAULT_TH
         if (samples.size < CHUNK_SAMPLES) return -1f
 
         return try {
-            // Convert short PCM to float [-1, 1]
-            val floatSamples = FloatArray(CHUNK_SAMPLES) { i ->
-                samples[i].toFloat() / 32768f
-            }
+            // openWakeWord feeds the melspectrogram RAW int16 magnitudes, NOT
+            // samples normalised to [-1, 1]. Measured against the bundled model:
+            // dividing by 32768 shifts every mel bin by a constant -90.31, so
+            // after the /10+2 transform below the embedding sees ~0.47 where it
+            // was trained on ~9.5. The classifier could never have fired even
+            // with the cast below fixed.
+            val floatSamples = FloatArray(CHUNK_SAMPLES) { i -> samples[i].toFloat() }
 
             // Stage 1: mel spectrogram
             val melOutput = runMelSpectrogram(floatSamples) ?: return -1f
 
-            // Scale and buffer: (val / 10.0) + 2.0
-            for (frame in 0 until MEL_FRAMES_PER_CHUNK) {
+            // Frame count comes from the model, not from a constant. A
+            // 1280-sample chunk yields 5 frames at hop 160 / window 480; the
+            // constant claimed 8, which would have over-read the array even
+            // once the cast was fixed.
+            for (frame in melOutput.indices) {
                 val scaledFrame = FloatArray(MEL_BINS) { bin ->
                     (melOutput[frame][bin] / 10f) + 2f
                 }
@@ -161,7 +167,18 @@ class KeywordSpotter(context: Context, private val threshold: Float = DEFAULT_TH
 
     // ---- ONNX inference stages ----
 
-    /** Stage 1: raw PCM [1, 1280] → mel spectrogram [1, 8, 32] */
+    /**
+     * Stage 1: raw PCM [1, 1280] -> mel frames [frames, 32].
+     *
+     * The model declares its output as **rank 4** ([time, 1, frames, 32]) and
+     * this used to cast it straight to `Array<Array<FloatArray>>`, a rank-3
+     * type. JVM array types are reified and checked exactly, so that threw
+     * `ClassCastException` on every single call -- roughly 12 times a second --
+     * and `processAudio`'s outer catch swallowed it and returned -1f. Confirmed
+     * on device 144512558D105352: 226 of them in an 18 s capture, and not one
+     * "KWS fired". Unwrapped recursively now, exactly as stages 2 and 3 already
+     * were; whoever made those two defensive missed this one.
+     */
     private fun runMelSpectrogram(samples: FloatArray): Array<FloatArray>? {
         val session = melSession ?: return null
         val inputTensor = OnnxTensor.createTensor(
@@ -176,12 +193,18 @@ class KeywordSpotter(context: Context, private val threshold: Float = DEFAULT_TH
             // of three stages threw on every frame, were swallowed by the catch
             // below, and the keyword could never fire.
             val result = session.run(mapOf(session.inputNames.first() to input))
-            result.use { r ->
-                @Suppress("UNCHECKED_CAST")
-                val raw = r[0].value as Array<Array<FloatArray>> // [1, 8, 32]
-                raw[0] // [8, 32]
-            }
+            result.use { r -> extractMelFrames(r[0].value) }
         }
+    }
+
+    /** Peel wrapper dimensions until the [frames, 32] matrix falls out. */
+    private fun extractMelFrames(raw: Any?): Array<FloatArray>? = when {
+        raw is Array<*> && raw.isNotEmpty() && raw[0] is FloatArray -> {
+            @Suppress("UNCHECKED_CAST")
+            raw as Array<FloatArray>
+        }
+        raw is Array<*> -> extractMelFrames(raw.firstOrNull())
+        else -> null
     }
 
     /** Stage 2: mel buffer [1, 76, 32, 1] → embedding [96] */
@@ -298,9 +321,6 @@ class KeywordSpotter(context: Context, private val threshold: Float = DEFAULT_TH
 
         /** 1280 samples = 80 ms at 16 kHz */
         const val CHUNK_SAMPLES = 1280
-
-        /** Mel spectrogram output: 8 frames per 80 ms chunk */
-        private const val MEL_FRAMES_PER_CHUNK = 8
 
         /** 32 Mel frequency bins */
         private const val MEL_BINS = 32

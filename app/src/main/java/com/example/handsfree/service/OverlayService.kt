@@ -61,6 +61,8 @@ class OverlayService : Service() {
 
     private lateinit var keywordSpotter: KeywordSpotter
     private var kwsBuffer = ShortArray(0)
+    private var kwsPeak = 0f
+    private var lastKwsLog = 0L
     @Volatile private var kwsListening = false
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -280,7 +282,15 @@ class OverlayService : Service() {
     private fun startKwsListening() {
         if (kwsListening || listening) return
         if (!keywordSpotter.isReady) {
-            Log.w(TAG, "KWS not ready — skipping")
+            // The three ONNX models load on a background coroutine started in
+            // onCreate. Enabling the call sign in the first second after launch
+            // landed here and gave up silently: the toggle read ON while
+            // nothing was listening, forever. Retry instead.
+            Log.i(TAG, "KWS models still loading - retrying in ${KWS_RETRY_MS}ms")
+            mainHandler.postDelayed(
+                { if (wakeWordEnabled && !listening && !kwsListening) startKwsListening() },
+                KWS_RETRY_MS
+            )
             return
         }
         kwsListening = true
@@ -401,6 +411,20 @@ class OverlayService : Service() {
             kwsBuffer = kwsBuffer.copyOfRange(KeywordSpotter.CHUNK_SAMPLES, kwsBuffer.size)
             
             val score = keywordSpotter.processAudio(chunk)
+
+            // The cascade used to return -1f on every chunk and nobody could
+            // tell, because nothing ever logged a score. Peak-per-interval so
+            // the log stays readable at 12.5 chunks/second.
+            if (score >= 0f) {
+                kwsPeak = maxOf(kwsPeak, score)
+                val now = System.currentTimeMillis()
+                if (now - lastKwsLog >= KWS_LOG_INTERVAL_MS) {
+                    Log.i(TAG, "KWS peak score %.4f (threshold %.2f)".format(kwsPeak, KWS_THRESHOLD))
+                    lastKwsLog = now
+                    kwsPeak = 0f
+                }
+            }
+
             if (score >= 0f && keywordSpotter.isKeywordDetected(score)) {
                 Log.i(TAG, "KWS fired (score=$score) -> starting Whisper")
                 mainHandler.post {
@@ -695,6 +719,11 @@ class OverlayService : Service() {
                 explicitActivation = true
                 startListening()
             }
+            // Bring the service up without opening a Whisper capture. Turning
+            // the call sign on used to send ACTION_START, which began a full
+            // 8-second listen the user never asked for -- the "it just opens
+            // the mic" complaint. Call-sign mode wants the KWS path, not this.
+            ACTION_ENSURE_RUNNING -> Unit
             ACTION_STOP_PIPELINE -> {
                 startWhenReady = false
                 wakeWordEnabled = false
@@ -810,12 +839,23 @@ class OverlayService : Service() {
          */
         private const val REARM_DELAY_MS = 600L
 
+        /** Poll interval while the KWS models are still loading. */
+        private const val KWS_RETRY_MS = 500L
+
+        /** How often the peak KWS score is logged while listening. */
+        private const val KWS_LOG_INTERVAL_MS = 2000L
+
+        /** Mirrors KeywordSpotter's default; logging only. */
+        private const val KWS_THRESHOLD = 0.5f
+
         const val ACTION_START = "com.example.handsfree.START"
         const val ACTION_STOP_PIPELINE = "com.example.handsfree.STOP_PIPELINE"
         /** Wake or sleep the listener. Sent by the bubble and the volume-key activator. */
         const val ACTION_ACTIVATE = "com.example.handsfree.ACTIVATE"
         /** Turn always-on call-sign listening on or off. Carries [EXTRA_ENABLED]. */
         const val ACTION_SET_WAKE_WORD = "com.example.handsfree.SET_WAKE_WORD"
+        /** Start the service without beginning a listening session. */
+        const val ACTION_ENSURE_RUNNING = "com.example.handsfree.ENSURE_RUNNING"
         const val EXTRA_ENABLED = "enabled"
 
         const val STATUS_PREPARING = "PREPARING"

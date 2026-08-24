@@ -225,9 +225,23 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         updateWakeWordButton()
 
         if (wakeWordOn && !pipelineActive) {
-            if (hasRecordAudioPermission()) startOverlayService() else {
+            if (!hasRecordAudioPermission()) {
                 requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
                 return
+            }
+            // Bring the service up, but do NOT call startOverlayService(): that
+            // sends ACTION_START, which opens an immediate 8-second Whisper
+            // capture nobody asked for and flips the button to "Stop
+            // Listening". Turning on a call sign should start the keyword
+            // spotter and nothing else -- the point of it is that the phone is
+            // idle until it hears you.
+            val boot = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_ENSURE_RUNNING
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(boot)
+            } else {
+                startService(boot)
             }
         }
         startService(
