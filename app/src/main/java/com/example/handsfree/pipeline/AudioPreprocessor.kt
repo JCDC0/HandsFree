@@ -40,8 +40,12 @@ class AudioPreprocessor(private val context: Context? = null) {
      * on a background thread (the preprocessor's IO coroutine). Buffers are
      * fresh [ShortArray] instances — the caller may retain them.
      *
-     * @param callback invoked for every audio chunk whose RMS exceeds the VAD
-     *        threshold. Receiver is invoked on a background thread.
+     * @param callback invoked for **every** audio chunk, silent ones included.
+     *        The VAD decides only *when the utterance has ended*, it does not
+     *        filter what is passed on — chunk-dropping was removed because
+     *        handing Whisper tightly-packed non-silent audio made it
+     *        hallucinate (see CLAUDE.md CHANGELOG, 2026-08-12 late afternoon).
+     *        Receiver is invoked on a background thread.
      * @param onError invoked when the recorder cannot start or the capture loop
      *        encounters an unrecoverable read/callback failure.
      */
