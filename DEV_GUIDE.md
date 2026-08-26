@@ -22,9 +22,9 @@ work live just because it appears here.
 | Go back | **bumalik** · balik · atras |
 | Go home | **pumunta sa home screen** · umuwi · go home |
 | Scroll | **mag-scroll pababa** · scroll pataas · ibaba · itaas |
-| Tap something on screen | **pindutin ang Games** · i-click ang Login |
+| Tap something on screen | **pindutin ang Calendar** · pindutin ang Games · i-click ang Login |
 | Recent apps / notifications | recents · buksan ang notifications |
-| Answer / reject a call | **sagutin** · **tanggihan** |
+| Answer / reject a call | **sagutin** · tanggihan · hindi · huwag |
 | Search the web | **hanapin ang sapatos** · maghanap ka ng adobo |
 | Alarm / timer | magset ng alarm alas siyete ng gabi · timer ng 45 minutes |
 
