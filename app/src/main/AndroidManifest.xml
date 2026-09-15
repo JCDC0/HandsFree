@@ -77,7 +77,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Main launcher activity (settings / onboarding / debug) -->
+        <!-- Main launcher activity (onboarding / debug / the two activators) -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -88,6 +88,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Settings, behind the cogwheel on the debug screen. Not exported:
+             nothing outside the app has any business opening it, and it can
+             write a log file to the share sheet. parentActivityName gives the
+             system Back behaviour without an action bar to host an up arrow;
+             the screen draws its own. -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.HandsFree" />
 
     </application>
 

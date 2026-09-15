@@ -8,10 +8,24 @@
 > The bottleneck is the **lexicon**, not the model. Bring voice-test logs, add
 > the garble to `app/src/main/assets/translation-lexicon.json`, rebuild.
 
-**Last updated:** 2026-08-24
-**Build status:** `1.5.1-tester`, versionCode 7. `assembleDebug` green,
-installed on 144512558D105352, published to Drive as
-`HandsFree-1.5.1-tester.apk`.
+**Last updated:** 2026-09-15
+**Build status:** `1.5.2-tester`, versionCode 8. **Not compiled and not
+installed.** The debug-screen redesign was written in a sandbox with no Android
+SDK and with `dl.google.com` blocked, so AGP could not be downloaded and Gradle
+never reached the app. Resource references were checked by script; Kotlin was
+not type-checked. **`./gradlew assembleDebug` is the first thing to run.**
+The last build that exists is `1.5.1-tester` / versionCode 7, green on
+144512558D105352 and published to Drive as `HandsFree-1.5.1-tester.apk`.
+
+### 1.5.2, what changed on screen
+
+The debug screen is now the status card, one pipeline card with three rows, and
+two 120dp round buttons: start/stop on the left, the Hey Jarvis toggle on the
+right. The seven controls that used to sit under them (microphone window,
+accessibility route, transcript log, system log, export, how-to, language) are
+behind the cogwheel at the top right, in a new settings screen. No emoji on
+either screen, and the status lines, result lines and exported log no longer
+use em dashes. Nothing in the pipeline was touched.
 
 ---
 

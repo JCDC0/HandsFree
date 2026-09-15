@@ -121,7 +121,9 @@ HandsFreeAccessibilityService    gestures, global actions, text input
 | `pipeline/WakeWordDetector.kt` | Text-level wake gate. Fuzzy-matches Whisper's transcript against `DEFAULT_VARIANTS` ("handsfree", "hansfree", …). In `OverlayService.applyWakeGate()`, this is **bypassed** whenever `awaitingCommand` is true, which is the state `handleKwsAudio()` sets on every KWS detection — so in always-on mode the phrase that actually opens the mic is "Hey Jarvis," and this detector's variant list never runs. |
 | `service/HandsFreeAccessibilityService.kt` | Gestures, global actions, volume-key activator. |
 | `service/OverlayService.kt` | Foreground service, bubble, orchestration. |
-| `MainActivity.kt` | Debug UI, permissions, loading dialog. |
+| `MainActivity.kt` | Debug UI, onboarding, the two round activators. |
+| `SettingsActivity.kt` | **New 1.5.2.** Everything behind the cogwheel: mic window, permissions route, both log viewers, export, how-to, display language. |
+| `util/Screens.kt` | **New 1.5.2.** The five helpers both screens need, so they cannot disagree about whether the accessibility service is on. |
 | `util/CrashLog.kt` | Breadcrumbs that survive native crashes. |
 
 ### Assets
@@ -346,6 +348,14 @@ Do not attempt Messaging or Scheduling live, even if they appear to work.
 **Last verified:** 2026-08-12 evening PHT, `./gradlew assembleDebug` and
 `installDebug` green on device 144512558D105352 (includes Whisper ONNX models).
 
+**1.5.2 (the debug-screen redesign) has not been compiled.** It was written in
+a sandbox with no Android SDK and with `dl.google.com` blocked by the egress
+policy, so AGP could not be downloaded and Gradle never reached the app. Every
+resource reference was checked by script instead (see the CHANGELOG entry).
+**Run `./gradlew assembleDebug` before this reaches a tester**, and expect the
+first failure, if there is one, to be a Kotlin type error rather than a
+missing resource.
+
 **Speech pipeline is running on hardware.** Whisper transcribes; the failures
 now come from the lexicon and the executor, not the model. Two structural
 hazards learned from the 18:28–18:32 log, worth knowing before editing the
@@ -403,7 +413,7 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
   unverified on this OEM skin
 - Tap-by-name against a real home screen with folders and emoji labels
 
-**Build identity (current):** `versionName 1.5.1-tester`, `versionCode 7`,
+**Build identity (current):** `versionName 1.5.2-tester`, `versionCode 8`,
 `applicationId ph.edu.hau.handsfree`. The exported tester log carries a `Build:`
 line with the git short SHA, so a report traces to an exact commit — always
 rebuild after the final commit before copying to Drive, or the stamp reads
@@ -502,6 +512,65 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-09-15 — 1.5.2: debug screen cut down, settings moved behind a cogwheel
+The debug screen had grown to nine stacked bars under four cards, most of them
+things a tester touches once. **Not compiled** — see the note at the top of §9.
+
+- **Two round activators replace the two full-width bars.** 120dp circles, side
+  by side, with the caption underneath rather than inside: "Magsimulang
+  makinig" does not fit in a circle at a readable size, and shrinking the
+  circle to fit the text would undo the point. The start circle carries a
+  microphone glyph and turns blue with a stop square while the mic is open; the
+  call-sign circle fills green when on. Both set `contentDescription` from the
+  same `Copy.Key` as the caption, so TalkBack announces the state and not just
+  "button" — on an accessibility app an unlabelled icon control is a defect.
+- **`SettingsActivity` (new) takes the other seven controls**, in the order
+  they were in, under three headings: PAKIKINIG (mic window, accessibility
+  route), MGA LOG (history, system log, export), TULONG (how-to, language).
+  The export, the report builder and the two log dialogs moved with it.
+- **`util/Screens.kt` (new)** holds the five things both screens need:
+  `themed`, `isAccessibilityServiceEnabled`, `hasAnswerCallPermission`,
+  `applySystemBarInsets`, `scrollingDialog`. Copied rather than shared, the
+  status card and the exported log could have disagreed about whether the
+  accessibility service was on.
+- **The three pipeline cards became one card with three rows.** They describe a
+  single utterance; as three cards one event looked like three, and the buttons
+  sat below the fold.
+- **A state dot on the status card**: grey idle, blue listening, green ran, red
+  failed. The state was previously only readable by reading a sentence.
+- **Every emoji is gone from the debug screen** and from the exported log's
+  footer. The glyphs that replaced them are vector drawables
+  (`ic_mic`, `ic_stop`, `ic_call_sign`, `ic_settings`, `ic_back`), which tint
+  with the button state; an emoji cannot, and renders differently per OEM.
+  **Deliberately left alone:** the consent, how-to and decline copy, which is
+  tester-facing warmth rather than debug chrome, and the floating bubble glyph
+  in `OverlayService`, which is the overlay and not this screen.
+- **Em dashes cleared from the status system and the logs**: the listening and
+  missing-permission lines, the activator hint, all four Setup Required
+  bullets, the intent result line (`INTENT: message`, or `INTENT FAILED:`), the
+  popup result line, the no-match placeholder (`—` became `NO MATCH`, which is
+  also what it means), the VAD-timeout reason written to `CrashLog`, three
+  accessibility-off messages and the alarm-permission message in
+  `CommandExecutor`, and the export header, subject and footer. Comments and
+  KDoc keep the repo's existing style; rewriting those is a large diff with
+  nothing behind it. `WhisperOnnxEngine`'s one user-visible em dash was left
+  alone on purpose — it is a handle-with-care file and punctuation is not a
+  good enough reason to open it.
+- **The build stamp is now on screen**, at the foot of the settings page. It
+  was already in every exported log, but most bug reports arrive over chat,
+  where nobody has the log.
+- `versionName 1.5.2-tester`, `versionCode 8`.
+- **Verification, stated honestly.** `./gradlew assembleDebug` could not run:
+  the sandbox has no Android SDK and the egress policy answers 403 to
+  `dl.google.com`, so AGP 9.0.1 never resolved. What *was* checked, by script:
+  every `R.<type>.<name>` in Kotlin and every `@type/name` in a layout resolves
+  against `res/`; every `findViewById` id exists in the layout that activity
+  inflates; every `Copy.Key` resolves to two real strings and every key used is
+  declared; every activity in the manifest has a class; all XML parses; no
+  unused imports and no references to the moved views remain. That is the whole
+  class of error a resource rename causes. It is not a compile, and it does not
+  catch a Kotlin type error.
 
 ### 2026-08-24 (night, 4) — CALL_ACCEPT verified. Docs only, no code.
 - **Answering a real ringing call works.** `Result: SUCCESS - Call answered`,

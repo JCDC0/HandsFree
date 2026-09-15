@@ -78,7 +78,8 @@ Then show the phone with **airplane mode visibly on**.
 
 **1. Open the app. Show the debug screen.**
 
-Point at the four panes — Status, Narinig, Salin, Detected Intent. Say:
+Point at the status card and the three pipeline rows — Narinig, Salin,
+Natukoy na Utos. Say:
 
 > "You'll see each stage as I speak: what the model heard, what it translated
 > to, and which command it matched."

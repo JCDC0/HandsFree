@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Settings screen, added in 1.5.2.
+
+  Holds everything that used to sit under the two activator buttons on the
+  debug screen: the microphone-open cap, the route to Accessibility settings,
+  the two log viewers, the export, the how-to, and the display language. A
+  tester touches most of these once, and while they were on the main screen
+  the transcript panes were half a scroll away from the button that produces
+  them.
+
+  Colours come from @color/hf_* so the screen follows the system light/dark
+  setting. Labels ship blank and SettingsActivity.applyLanguage() fills them,
+  the same rule as the debug screen: a label nobody wires up then shows as an
+  empty control, which gets noticed, rather than as stale text in the wrong
+  language, which does not.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settings_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/hf_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="28dp">
+
+        <!-- Title bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="18dp">
+
+            <ImageView
+                android:id="@+id/back_button"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="10dp"
+                android:layout_marginStart="-10dp"
+                android:layout_marginEnd="6dp"
+                android:src="@drawable/ic_back"
+                android:background="@drawable/icon_button"
+                android:clickable="true"
+                android:focusable="true"
+                android:tint="@color/hf_icon_muted"
+                android:contentDescription="" />
+
+            <TextView
+                android:id="@+id/settings_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.01"
+                android:textColor="@color/hf_text_primary" />
+        </LinearLayout>
+
+        <!-- ==================== LISTENING ==================== -->
+        <TextView
+            android:id="@+id/section_listening"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.12"
+            android:textColor="@color/hf_text_label"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Mic-open cap. Only bites when the VAD cannot tell the speaker
+             stopped; a normal command ends on trailing silence well before it.
+             Exposed because the right value depends on how fast a person starts
+             talking after activating, and we have no data on that yet. -->
+        <androidx.cardview.widget.CardView
+            xmlns:card_view="http://schemas.android.com/apk/res-auto"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            card_view:cardCornerRadius="16dp"
+            card_view:cardElevation="1dp"
+            card_view:cardBackgroundColor="@color/hf_card"
+            android:layout_marginBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/listen_window_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/hf_text_primary" />
+
+                <TextView
+                    android:id="@+id/listen_window_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="2sp"
+                    android:textColor="@color/hf_text_label"
+                    android:layout_marginTop="4dp" />
+
+                <SeekBar
+                    android:id="@+id/listen_window_seek"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <Button
+            android:id="@+id/perm_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text=""
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
+            android:layout_marginBottom="22dp" />
+
+        <!-- ==================== LOGS ==================== -->
+        <TextView
+            android:id="@+id/section_logs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.12"
+            android:textColor="@color/hf_text_label"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/show_history_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text=""
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_accent_bg"
+            android:textColor="@color/hf_button_accent_text"
+            android:layout_marginBottom="10dp" />
+
+        <Button
+            android:id="@+id/show_log_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text=""
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
+            android:layout_marginBottom="10dp" />
+
+        <!-- The tester's route back to us: writes the log to a file and hands it
+             to the share sheet, for the Google Form. Accent-coloured because on
+             a testing build it is the most important button on this screen. -->
+        <Button
+            android:id="@+id/export_log_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text=""
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_accent_bg"
+            android:textColor="@color/hf_button_accent_text"
+            android:layout_marginBottom="22dp" />
+
+        <!-- ==================== HELP ==================== -->
+        <TextView
+            android:id="@+id/section_help"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.12"
+            android:textColor="@color/hf_text_label"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/how_to_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text=""
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
+            android:layout_marginBottom="10dp" />
+
+        <!-- Label is set from Kotlin — it names the language you would switch
+             TO, so hardcoding either half here would be wrong half the time. -->
+        <Button
+            android:id="@+id/language_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text=""
+            android:textSize="14sp"
+            android:lineSpacingExtra="2sp"
+            android:backgroundTint="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Build stamp. It is already in every exported log; putting it on
+             screen means a tester can read it out over chat without exporting
+             anything, which is how most bug reports actually arrive. -->
+        <TextView
+            android:id="@+id/build_stamp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:gravity="center"
+            android:textSize="11sp"
+            android:textColor="@color/hf_text_label" />
+
+    </LinearLayout>
+</ScrollView>

@@ -31,4 +31,16 @@
     <color name="hf_status_active">#64B5F6</color>
     <color name="hf_status_success">#81C784</color>
     <color name="hf_status_error">#EF5350</color>
+
+    <color name="hf_circle_idle_bg">#3A3A5C</color>
+    <color name="hf_circle_idle_icon">#FFFFFF</color>
+    <color name="hf_circle_listening_bg">#2A6FB5</color>
+    <color name="hf_circle_listening_icon">#FFFFFF</color>
+    <color name="hf_circle_off_bg">#2C2C2C</color>
+    <color name="hf_circle_off_icon">#CFCFCF</color>
+    <color name="hf_circle_on_bg">#2E6B33</color>
+    <color name="hf_circle_on_icon">#FFFFFF</color>
+
+    <color name="hf_divider">#2E2E2E</color>
+    <color name="hf_icon_muted">#A2A2AE</color>
 </resources>

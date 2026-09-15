@@ -95,7 +95,14 @@ object Copy {
         STATUS_LISTENING(R.string.ui_status_listening_tl, R.string.ui_status_listening_en),
 
         LISTEN_WINDOW_LABEL(R.string.listen_window_label_tl, R.string.listen_window_label_en),
-        LISTEN_WINDOW_HINT(R.string.listen_window_hint_tl, R.string.listen_window_hint_en)
+        LISTEN_WINDOW_HINT(R.string.listen_window_hint_tl, R.string.listen_window_hint_en),
+
+        SETTINGS_TITLE(R.string.ui_settings_title_tl, R.string.ui_settings_title_en),
+        SECTION_LISTENING(R.string.ui_section_listening_tl, R.string.ui_section_listening_en),
+        SECTION_LOGS(R.string.ui_section_logs_tl, R.string.ui_section_logs_en),
+        SECTION_HELP(R.string.ui_section_help_tl, R.string.ui_section_help_en),
+        OPEN_SETTINGS(R.string.ui_open_settings_tl, R.string.ui_open_settings_en),
+        BACK(R.string.ui_back_tl, R.string.ui_back_en)
     }
 
     private const val PREFS = "handsfree_prefs"

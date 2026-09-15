@@ -63,7 +63,7 @@ class CommandExecutor(
         // answers without the accessibility service being involved at all. The
         // service is only needed for the node-click fallback.
         if (a11y == null && intentCategory !in NO_A11Y_REQUIRED) {
-            return Result(false, "Accessibility Service is off — enable HandsFree in Settings")
+            return Result(false, "Accessibility Service is off. Enable HandsFree in Settings")
         }
 
         // "pumunta sa home screen" normalises to "go home", which contains an
@@ -75,7 +75,7 @@ class CommandExecutor(
             val destination = argumentAfter(utterance, matchedPhrase).trim()
             if (NAVIGATION_TARGETS.any { destination.startsWith(it) }) {
                 return a11y?.let { navigate(utterance, matchedPhrase, it) }
-                    ?: Result(false, "Accessibility Service is off — enable HandsFree in Settings")
+                    ?: Result(false, "Accessibility Service is off. Enable HandsFree in Settings")
             }
         }
 
@@ -89,7 +89,7 @@ class CommandExecutor(
             val verb = TAP_VERBS.firstOrNull { utterance.startsWith(it, ignoreCase = true) }
             if (verb != null) {
                 return a11y?.let { navigate(utterance, verb, it) }
-                    ?: Result(false, "Accessibility Service is off — enable HandsFree in Settings")
+                    ?: Result(false, "Accessibility Service is off. Enable HandsFree in Settings")
             }
         }
 
@@ -434,7 +434,7 @@ class CommandExecutor(
             // Missing SET_ALARM in the manifest looks exactly like "no clock app"
             // from here. It cost a whole test round on 2026-08-12; name it.
             Log.e(TAG, "AlarmClock denied — SET_ALARM permission missing", se)
-            Result(false, "Alarm blocked — SET_ALARM permission missing")
+            Result(false, "Alarm blocked: SET_ALARM permission missing")
         } catch (t: Throwable) {
             Log.e(TAG, "AlarmClock intent failed", t)
             Result(false, "No clock app handled the alarm")
@@ -524,7 +524,7 @@ class CommandExecutor(
          * because whoever reads the exported log may not be.
          */
         const val OFFLINE_WARNING =
-            "Walang internet — hindi mag-lo-load ang hinanap. " +
+            "Walang internet. Hindi mag-lo-load ang hinanap. " +
                 "(No internet connection: the search results will not load.)"
 
         /** Intents that can still do something useful with the service off. */

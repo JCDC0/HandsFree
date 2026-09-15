@@ -1,0 +1,23 @@
+<!--
+  Background for the two round activator buttons.
+
+  The fill is white here and tinted from Kotlin, because each button has two
+  states and the tint is what carries them. The mask is what keeps the ripple
+  inside the circle: without it the touch feedback draws to the square bounds
+  of the view and the button looks rectangular the moment you press it.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#40FFFFFF">
+
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFF" />
+        </shape>
+    </item>
+
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFF" />
+        </shape>
+    </item>
+</ripple>

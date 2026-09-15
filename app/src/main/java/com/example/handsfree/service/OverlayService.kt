@@ -100,7 +100,7 @@ class OverlayService : Service() {
     private val sleepRunnable = Runnable {
         if (listening) {
             Log.i(TAG, "listening window elapsed — returning to idle")
-            stopListening("Timed out after ${listenWindowMs() / 1000}s — VAD never fired")
+            stopListening("Timed out after ${listenWindowMs() / 1000}s, VAD never fired")
         }
     }
 
@@ -478,7 +478,7 @@ class OverlayService : Service() {
             val logEntry = "[$timestamp]\nNarinig: $raw\nSalin: $normalized\nIntent: $intentStr\nResult: FAILED - $resultMsg"
             recordTranscript(logEntry)
 
-            emitCommand("—", false, resultMsg)
+            emitCommand("NO MATCH", false, resultMsg)
             stopListening("no match")
             scheduleRearm()
             return
@@ -685,7 +685,7 @@ class OverlayService : Service() {
         mainHandler.post {
             pipelineListener?.onCommandExecuted(i, ok, m, warning)
             popupIntentText?.visibility = View.VISIBLE
-            popupIntentText?.text = if (ok) "$i — $m" else "$i — FAILED: $m"
+            popupIntentText?.text = if (ok) "$i: $m" else "$i FAILED: $m"
             popupIntentText?.setTextColor(if (ok) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#E57373"))
 
             popupWarningText?.visibility = if (warning != null) View.VISIBLE else View.GONE

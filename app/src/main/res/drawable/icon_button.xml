@@ -1,0 +1,10 @@
+<!-- Touch feedback for the cogwheel and the back arrow: a circle centred on
+     the icon, with no fill of its own. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33808080">
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFF" />
+        </shape>
+    </item>
+</ripple>

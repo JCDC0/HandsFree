@@ -1,0 +1,10 @@
+<!-- Stop-listening glyph. Pairs with ic_mic in the same circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M8.2,6.5 h7.6 a1.7,1.7 0 0,1 1.7,1.7 v7.6 a1.7,1.7 0 0,1 -1.7,1.7 h-7.6 a1.7,1.7 0 0,1 -1.7,-1.7 v-7.6 a1.7,1.7 0 0,1 1.7,-1.7 z" />
+</vector>

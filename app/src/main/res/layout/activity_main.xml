@@ -3,39 +3,78 @@
   Debug UI. Colours come from @color/hf_* so the screen follows the system
   light/dark setting — see values/colors.xml and values-night/colors.xml.
   Do not put a raw #hex back in here.
+
+  1.5.2: this screen holds the pipeline and the two activators and nothing
+  else. Everything a tester touches once (mic window, permissions, logs,
+  export, how-to, language) is behind the cogwheel in activity_settings.xml.
+  A tester stares at this screen while speaking; anything that is not the
+  transcript or a way to start listening was competing for that attention.
+
+  No emoji anywhere on this screen. The two activators carry vector glyphs
+  (ic_mic, ic_call_sign), which tint with the button state; an emoji cannot.
 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fillViewport="true"
     android:background="@color/hf_background">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="28dp">
 
-        <!-- Header -->
-        <TextView
+        <!-- Title bar. The cogwheel is the only way off this screen, so it sits
+             at the top right where a thumb reaches it and where every other
+             Android app puts it. -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🎙️ HandsFree"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:textColor="@color/hf_text_primary"
-            android:gravity="center"
-            android:layout_marginBottom="4dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="18dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:id="@+id/subtitle_text"
-            android:text=""
-            android:textSize="13sp"
-            android:textColor="@color/hf_text_label"
-            android:gravity="center"
-            android:layout_marginBottom="20dp" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="-0.01"
+                    android:textColor="@color/hf_text_primary" />
+
+                <TextView
+                    android:id="@+id/subtitle_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="13sp"
+                    android:textColor="@color/hf_text_label" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/settings_button"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="10dp"
+                android:src="@drawable/ic_settings"
+                android:background="@drawable/icon_button"
+                android:clickable="true"
+                android:focusable="true"
+                android:tint="@color/hf_icon_muted"
+                android:contentDescription="" />
+        </LinearLayout>
 
         <!-- Warning banner. Sits above the status card so it is the first thing
              read, and is hidden unless a command ran into something outside the
@@ -47,10 +86,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            card_view:cardCornerRadius="12dp"
-            card_view:cardElevation="2dp"
+            card_view:cardCornerRadius="16dp"
+            card_view:cardElevation="0dp"
             card_view:cardBackgroundColor="@color/hf_warning_bg"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="12dp">
 
             <TextView
                 android:id="@+id/warning_text"
@@ -63,64 +102,88 @@
                 android:textColor="@color/hf_warning_text" />
         </androidx.cardview.widget.CardView>
 
-        <!-- Status Card -->
+        <!-- Status card. The dot on the left is tinted from MainActivity and is
+             the fastest read on the screen: grey idle, blue listening, green
+             ran, red failed. -->
         <androidx.cardview.widget.CardView
             xmlns:card_view="http://schemas.android.com/apk/res-auto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            card_view:cardCornerRadius="12dp"
-            card_view:cardElevation="4dp"
+            card_view:cardCornerRadius="16dp"
+            card_view:cardElevation="1dp"
             card_view:cardBackgroundColor="@color/hf_card"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="12dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:padding="16dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:id="@+id/status_label"
-                    android:text=""
-                    android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/hf_text_label"
-                    android:letterSpacing="0.1"
-                    android:layout_marginBottom="6dp" />
+                <View
+                    android:id="@+id/status_dot"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:layout_marginTop="5dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="@drawable/status_dot" />
 
-                <TextView
-                    android:id="@+id/status_text"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="HandsFree ready"
-                    android:textSize="16sp"
-                    android:textColor="@color/hf_text_primary"
-                    android:textStyle="bold" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/status_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/hf_text_label"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/status_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textSize="15sp"
+                        android:lineSpacingExtra="2sp"
+                        android:textColor="@color/hf_text_primary"
+                        android:textStyle="bold" />
+                </LinearLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Transcription Card -->
+        <!-- One card, three rows: what was heard, what it normalised to, what
+             it matched. They describe a single utterance, so three separate
+             cards made one event look like three and pushed the buttons off
+             the bottom of the screen. -->
         <androidx.cardview.widget.CardView
             xmlns:card_view="http://schemas.android.com/apk/res-auto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            card_view:cardCornerRadius="12dp"
-            card_view:cardElevation="4dp"
+            card_view:cardCornerRadius="16dp"
+            card_view:cardElevation="1dp"
             card_view:cardBackgroundColor="@color/hf_card"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="20dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp">
 
                 <TextView
+                    android:id="@+id/transcribed_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:id="@+id/transcribed_label"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
                     android:text=""
                     android:textSize="10sp"
                     android:textStyle="bold"
@@ -132,34 +195,27 @@
                     android:id="@+id/transcribed_text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="—"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:minHeight="44dp"
+                    android:text=""
                     android:textSize="16sp"
                     android:textColor="@color/hf_text_body"
                     android:gravity="top" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
 
-        <!-- Translation Card -->
-        <androidx.cardview.widget.CardView
-            xmlns:card_view="http://schemas.android.com/apk/res-auto"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            card_view:cardCornerRadius="12dp"
-            card_view:cardElevation="4dp"
-            card_view:cardBackgroundColor="@color/hf_card"
-            android:layout_marginBottom="16dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/hf_divider" />
 
                 <TextView
+                    android:id="@+id/translated_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:id="@+id/translated_label"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
                     android:text=""
                     android:textSize="10sp"
                     android:textStyle="bold"
@@ -171,34 +227,27 @@
                     android:id="@+id/translated_text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="—"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:minHeight="44dp"
+                    android:text=""
                     android:textSize="16sp"
                     android:textColor="@color/hf_text_body"
                     android:gravity="top" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
 
-        <!-- Intent Card -->
-        <androidx.cardview.widget.CardView
-            xmlns:card_view="http://schemas.android.com/apk/res-auto"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            card_view:cardCornerRadius="12dp"
-            card_view:cardElevation="4dp"
-            card_view:cardBackgroundColor="@color/hf_card"
-            android:layout_marginBottom="24dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="@color/hf_divider" />
 
                 <TextView
+                    android:id="@+id/intent_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:id="@+id/intent_label"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
                     android:text=""
                     android:textSize="10sp"
                     android:textStyle="bold"
@@ -210,8 +259,10 @@
                     android:id="@+id/intent_text"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="32dp"
-                    android:text="—"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:minHeight="28dp"
+                    android:text=""
                     android:textSize="16sp"
                     android:textColor="@color/hf_intent"
                     android:textStyle="bold"
@@ -219,175 +270,98 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Buttons. wrap_content + minHeight, never a fixed height: a label
-             that wraps to two lines is clipped by a fixed 52dp button. -->
-        <Button
-            android:id="@+id/start_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="15sp"
-            android:backgroundTint="@color/hf_button_primary_bg"
-            android:textColor="@color/hf_button_primary_text"
-            android:layout_marginBottom="10dp" />
+        <!-- The two activators. Round and large because the person using this
+             app may not be able to aim: a 120dp circle is roughly three times
+             the area of the 52dp bar it replaces, and there are now two
+             targets on the screen instead of nine.
 
-        <Button
-            android:id="@+id/wake_word_button"
+             The label is under the circle, not in it. "Magsimulang makinig"
+             does not fit inside a circle at a readable size, and shrinking the
+             circle to fit the text would undo the point of the change. -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="14sp"
-            android:backgroundTint="@color/hf_button_neutral_bg"
-            android:textColor="@color/hf_button_neutral_text"
-            android:layout_marginBottom="10dp" />
-
-        <!-- Mic-open cap. Only bites when the VAD cannot tell the speaker
-             stopped; a normal command ends on trailing silence well before it.
-             Exposed because the right value depends on how fast a person starts
-             talking after activating, and we have no data on that yet. -->
-        <androidx.cardview.widget.CardView
-            xmlns:card_view="http://schemas.android.com/apk/res-auto"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            card_view:cardCornerRadius="12dp"
-            card_view:cardElevation="2dp"
-            card_view:cardBackgroundColor="@color/hf_card"
-            android:layout_marginBottom="10dp">
+            android:orientation="horizontal"
+            android:gravity="center">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:gravity="center_horizontal">
+
+                <FrameLayout
+                    android:id="@+id/start_button"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:background="@drawable/circle_button"
+                    android:elevation="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="">
+
+                    <ImageView
+                        android:id="@+id/start_icon"
+                        android:layout_width="52dp"
+                        android:layout_height="52dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_mic"
+                        android:importantForAccessibility="no"
+                        android:contentDescription="" />
+                </FrameLayout>
 
                 <TextView
-                    android:id="@+id/listen_window_label"
+                    android:id="@+id/start_caption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
                     android:text=""
-                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:textSize="13sp"
                     android:textStyle="bold"
                     android:textColor="@color/hf_text_primary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+
+                <FrameLayout
+                    android:id="@+id/wake_word_button"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:background="@drawable/circle_button"
+                    android:elevation="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="">
+
+                    <ImageView
+                        android:id="@+id/wake_word_icon"
+                        android:layout_width="52dp"
+                        android:layout_height="52dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_call_sign"
+                        android:importantForAccessibility="no"
+                        android:contentDescription="" />
+                </FrameLayout>
 
                 <TextView
-                    android:id="@+id/listen_window_hint"
+                    android:id="@+id/wake_word_caption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
                     android:text=""
-                    android:textSize="12sp"
-                    android:textColor="@color/hf_text_label"
-                    android:layout_marginTop="4dp" />
-
-                <SeekBar
-                    android:id="@+id/listen_window_seek"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp" />
+                    android:gravity="center"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/hf_text_primary" />
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <Button
-            android:id="@+id/perm_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="14sp"
-            android:lineSpacingExtra="2sp"
-            android:backgroundTint="@color/hf_button_neutral_bg"
-            android:textColor="@color/hf_button_neutral_text"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/show_history_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="14sp"
-            android:lineSpacingExtra="2sp"
-            android:backgroundTint="@color/hf_button_accent_bg"
-            android:textColor="@color/hf_button_accent_text"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/show_log_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="14sp"
-            android:lineSpacingExtra="2sp"
-            android:backgroundTint="@color/hf_button_neutral_bg"
-            android:textColor="@color/hf_button_neutral_text"
-            android:layout_marginBottom="10dp" />
-
-        <!-- The tester's route back to us: writes the log to a file and hands it
-             to the share sheet, for the Google Form. Accent-coloured because on
-             a testing build it is the second most important button here. -->
-        <Button
-            android:id="@+id/export_log_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="14sp"
-            android:lineSpacingExtra="2sp"
-            android:backgroundTint="@color/hf_button_accent_bg"
-            android:textColor="@color/hf_button_accent_text"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/how_to_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="14sp"
-            android:lineSpacingExtra="2sp"
-            android:backgroundTint="@color/hf_button_neutral_bg"
-            android:textColor="@color/hf_button_neutral_text"
-            android:layout_marginBottom="10dp" />
-
-        <!-- Label is set from Kotlin — it names the language you would switch
-             TO, so hardcoding either half here would be wrong half the time. -->
-        <Button
-            android:id="@+id/language_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text="🌐 Wika / Language"
-            android:textSize="14sp"
-            android:lineSpacingExtra="2sp"
-            android:backgroundTint="@color/hf_button_neutral_bg"
-            android:textColor="@color/hf_button_neutral_text" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="🙌"
-            android:textSize="20sp"
-            android:gravity="center"
-            android:layout_marginTop="18dp"
-            android:paddingBottom="18dp" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

@@ -31,8 +31,9 @@ work live just because it appears here.
 Particles are ignored, so `po`, `mo`, `nga`, `naman`, `lang`, `paki-`, `pwede
 mo bang` are all safe to say naturally.
 
-**Call sign (optional, off by default).** Tap **👂 Hey Jarvis: OFF** in the debug
-UI to turn it on, then say **"Hey Jarvis"**, wait for the box, and say your
+**Call sign (optional, off by default).** Tap the right-hand round button on
+the debug screen, captioned **Hey Jarvis: OFF**, to turn it on. It fills green
+when it is on. Then say **"Hey Jarvis"**, wait for the box, and say your
 command. The phrase really is *Hey Jarvis* — the bundled detector is
 openWakeWord's pretrained model and has never been trained on the app's own
 name. Training a real "Hey HandsFree" is §6b, and is **not** to be started
@@ -167,7 +168,9 @@ writing Kotlin.
 
 ## 3. The work loop
 
-1. Run commands on the device, open **Transcript History** in the debug UI.
+1. Run commands on the device, then open the cogwheel on the debug screen and
+   tap **Narinig, Salin at Intent Log** under MGA LOG. (Before 1.5.2 this
+   button was on the debug screen itself.)
 2. Copy the entry. It gives you `Narinig` (what Whisper heard), `Salin` (after
    the lexicon), `Intent`, and `Result`. **Add one line of your own: what screen
    you were on and what you expected.** Without that nobody can tell a bad

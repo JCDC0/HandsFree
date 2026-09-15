@@ -44,4 +44,24 @@
     <color name="hf_status_active">#1E88E5</color>
     <color name="hf_status_success">#2E7D32</color>
     <color name="hf_status_error">#D32F2F</color>
+
+    <!-- Round activator buttons. Two states each, set from MainActivity: the
+         start button is idle or listening, the call-sign button is off or on.
+         Icon colours are named separately because the fill changes underneath
+         them and a fixed icon colour fails contrast in one of the two. -->
+    <color name="hf_circle_idle_bg">#1A1A2E</color>
+    <color name="hf_circle_idle_icon">#FFFFFF</color>
+    <color name="hf_circle_listening_bg">#1E88E5</color>
+    <color name="hf_circle_listening_icon">#FFFFFF</color>
+    <color name="hf_circle_off_bg">#ECECEF</color>
+    <color name="hf_circle_off_icon">#4A4A5A</color>
+    <color name="hf_circle_on_bg">#2E7D32</color>
+    <color name="hf_circle_on_icon">#FFFFFF</color>
+
+    <!-- Hairline between the three pipeline rows, which now share one card. -->
+    <color name="hf_divider">#E4E4E8</color>
+
+    <!-- Cogwheel and back arrow. Muted: they are how you leave the screen,
+         not what you came to it for. -->
+    <color name="hf_icon_muted">#6B6B7B</color>
 </resources>

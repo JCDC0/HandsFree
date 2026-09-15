@@ -1,0 +1,29 @@
+<!--
+  Start-listening glyph. Hand-written paths, not an imported icon set: the app
+  has no icon dependency and one microphone is not worth adding one.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Capsule -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2 m-3.2,0 a3.2,3.2 0 0,1 6.4,0 v7.4 a3.2,3.2 0 0,1 -6.4,0 z" />
+
+    <!-- Pickup arc and stand -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M5.8,10.6 v0.9 a6.2,6.2 0 0,0 12.4,0 v-0.9" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M12,17.7 v3.3" />
+</vector>
