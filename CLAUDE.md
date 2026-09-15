@@ -525,10 +525,12 @@ things a tester touches once. **Not compiled** — see the note at the top of §
   call-sign circle fills green when on. Both set `contentDescription` from the
   same `Copy.Key` as the caption, so TalkBack announces the state and not just
   "button" — on an accessibility app an unlabelled icon control is a defect.
-- **`SettingsActivity` (new) takes the other seven controls**, in the order
-  they were in, under three headings: PAKIKINIG (mic window, accessibility
-  route), MGA LOG (history, system log, export), TULONG (how-to, language).
-  The export, the report builder and the two log dialogs moved with it.
+- **`SettingsActivity` (new) takes the other seven controls** under three
+  headings: PAKIKINIG / LISTENING (mic window, accessibility route), TULONG /
+  HELP (how-to, language), then MGA LOG / LOGS (history, system log, export).
+  Logs sit last at JC's request: a tester reaches for the export once, at the
+  end of a session, and it was pushing the how-to below the fold. The export,
+  the report builder and the two log dialogs moved with it.
 - **`util/Screens.kt` (new)** holds the five things both screens need:
   `themed`, `isAccessibilityServiceEnabled`, `hasAnswerCallPermission`,
   `applySystemBarInsets`, `scrollingDialog`. Copied rather than shared, the
