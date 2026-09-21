@@ -25,12 +25,13 @@ import kotlin.math.sqrt
  * Applies a simple energy-threshold Voice Activity Detection (VAD) to skip
  * silent buffers (spectral subtraction is deferred per Phase 1 plan). Buffers
  * containing speech are forwarded to [VoskSpeechEngine] via the callback passed
- * to [startCapture]. All capture work runs on a background coroutine — never
+ * to [startCapture]. All capture work runs on a background coroutine - never
  * on the main thread.
  */
 class AudioPreprocessor(private val context: Context? = null) {
 
-    @Volatile private var isCapturing = false
+    @Volatile var isCapturing = false
+        private set
     private var audioRecord: AudioRecord? = null
     private var captureJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -38,11 +39,11 @@ class AudioPreprocessor(private val context: Context? = null) {
     /**
      * Start microphone capture. Each non-silent chunk is forwarded to [callback]
      * on a background thread (the preprocessor's IO coroutine). Buffers are
-     * fresh [ShortArray] instances — the caller may retain them.
+     * fresh [ShortArray] instances - the caller may retain them.
      *
      * @param callback invoked for **every** audio chunk, silent ones included.
      *        The VAD decides only *when the utterance has ended*, it does not
-     *        filter what is passed on — chunk-dropping was removed because
+     *        filter what is passed on - chunk-dropping was removed because
      *        handing Whisper tightly-packed non-silent audio made it
      *        hallucinate (see CLAUDE.md CHANGELOG, 2026-08-12 late afternoon).
      *        Receiver is invoked on a background thread.
@@ -207,7 +208,7 @@ class AudioPreprocessor(private val context: Context? = null) {
 
         // RMS threshold for VAD (in raw sample units). Silence white-noise RMS
         // typically reads ~30-100 on handheld devices; speech reads ~1000+.
-        // Tunable — lower to capture quieter speech, raise to filter noisier rooms.
+        // Tunable: lower to capture quieter speech, raise to filter noisier rooms.
         private const val VAD_THRESHOLD = 300
 
         /**

@@ -116,7 +116,8 @@ HandsFreeAccessibilityService    gestures, global actions, text input
 | `pipeline/LevenshteinMatcher.kt` | Intent classification. |
 | `pipeline/TranslationLayer.kt` | Lexicon normalisation. |
 | `pipeline/AudioPreprocessor.kt` | Mic capture and VAD. |
-| `pipeline/AppStateMachine.kt` | Scaffolded, **not wired**. Multi-turn context. |
+| `pipeline/AppStateMachine.kt` | FSM single source of truth for pipeline states. |
+| `pipeline/PipelineWatchdog.kt` | Watchdog recovering non-idle pipeline states on hang. |
 | `pipeline/KeywordSpotter.kt` | **Working since 2026-08-24 (§9).** Three-stage ONNX wake cascade. Runs `assets/kws/hey_jarvis_v0.1.onnx` — a **pretrained openWakeWord "Hey Jarvis" model**, not one trained on "Hey HandsFree." Threshold 0.5. See §9 for the naming mismatch this creates. |
 | `pipeline/WakeWordDetector.kt` | Text-level wake gate. Fuzzy-matches Whisper's transcript against `DEFAULT_VARIANTS` ("handsfree", "hansfree", …). In `OverlayService.applyWakeGate()`, this is **bypassed** whenever `awaitingCommand` is true, which is the state `handleKwsAudio()` sets on every KWS detection — so in always-on mode the phrase that actually opens the mic is "Hey Jarvis," and this detector's variant list never runs. |
 | `service/HandsFreeAccessibilityService.kt` | Gestures, global actions, volume-key activator. |
@@ -413,12 +414,12 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
   unverified on this OEM skin
 - Tap-by-name against a real home screen with folders and emoji labels
 
-**Build identity (current):** `versionName 1.5.2-tester`, `versionCode 8`,
+**Build identity (current):** `versionName 1.5.3-tester`, `versionCode 9`,
 `applicationId ph.edu.hau.handsfree`. The exported tester log carries a `Build:`
-line with the git short SHA, so a report traces to an exact commit — always
+line with the git short SHA, so a report traces to an exact commit: always
 rebuild after the final commit before copying to Drive, or the stamp reads
 `-dirty` and traces to nothing. **This build will not upgrade over a pre-1.1
-install** — uninstall `com.example.handsfree` first. See §6.
+install**: uninstall `com.example.handsfree` first. See §6.
 
 **Built 2026-08-17 for the tester round, compiled but never run:** the consent
 screen, the how-to screen, the Tagalog/English display toggle, the offline
@@ -431,8 +432,7 @@ first, or the prefs from a previous run skip every screen), and export a log to
 confirm the share sheet appears and the file opens. On a phone that still has a
 pre-1.1 build, the old id has to go too: `adb uninstall com.example.handsfree`.
 
-**Not wired:** `AppStateMachine.kt` (scaffolded, never instantiated).
-Multi-turn commands hold no context — each utterance is independent.
+**Wired:** `AppStateMachine.kt` (FSM single source of truth for pipeline states, atomic `tryActivate`, and `PipelineWatchdog`).
 
 **Wake word: WORKS as of 2026-08-24.** The 2026-08-20 decision to ship it
 disabled and report it as a limitation was **reversed** at JC's request, and the
@@ -512,6 +512,18 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-09-21: 1.5.3: wire the state machine and add a pipeline watchdog to stop double activations
+Workstream W1. Addresses activation and popup race conditions where check-then-act on @Volatile booleans allowed duplicate activations and orphaned inference runs.
+
+- **`AppStateMachine` wired as the single source of truth.** The six-state FSM (IDLE, LISTENING, PREPROCESSING, NORMALIZING, PROCESSING, EXECUTING) replaces the seven booleans in `OverlayService`.
+- **Activations gated through atomic `tryActivate()`.** All transitions are serialized under the state machine monitor. An activation arriving in any state other than IDLE is rejected and logged to `CrashLog` as a no-op without queuing.
+- **Synchronized flag getters in `AppStateMachine.kt`.** Replaced plain `var` properties for `isKwsListening`, `isExplicitActivation` and `isAwaitingCommand` with explicit synchronized getters matching `currentState`.
+- **Listeners invoked outside the lock.** `transitionTo`, `tryActivate` and `reset` capture a snapshot of listeners inside the monitor and invoke callbacks after leaving the synchronized block.
+- **Pipeline watchdog (`PipelineWatchdog.kt`).** Armed on every transition out of IDLE and cancelled on arrival at IDLE. Budgeted as the mic listen window plus a 20s inference allowance (`WATCHDOG_INFERENCE_ALLOWANCE_MS`). On expiry, logs to `CrashLog`, calls `stateMachine.reset()`, clears the popup, and returns the bubble to idle to prevent permanent deaf state if inference hangs.
+- **Serialized popup show and dismiss.** Removal clears `popupView` within the same posted block that calls `removeView`, and `showAssistantPopup` cancels pending dismiss runnables. `WindowManager.addView` failures in popup and bubble now log to `CrashLog`.
+- `versionName 1.5.3-tester`, `versionCode 9`.
+- **Verification:** Unit test suite in `AppStateMachineTest` passes (full sequence, invalid transition rejections, watchdog recovery of stuck non-IDLE states, lock-free listener invocation, and 10-thread atomic activation contention). Device verification on physical hardware is still pending.
 
 ### 2026-09-15 — 1.5.2: debug screen cut down, settings moved behind a cogwheel
 The debug screen had grown to nine stacked bars under four cards, most of them
