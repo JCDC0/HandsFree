@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three bars on a 12-unit grid, square ends: the drawer button in the
+     pixel-art style. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="12"
+    android:viewportHeight="12">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M1,2h10v2h-10z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M1,5h10v2h-10z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M1,8h10v2h-10z" />
+</vector>

@@ -80,6 +80,8 @@ object Copy {
         DLG_COPY(R.string.ui_dlg_copy_tl, R.string.ui_dlg_copy_en),
         DLG_CLOSE(R.string.ui_dlg_close_tl, R.string.ui_dlg_close_en),
         DLG_EXPORT(R.string.ui_dlg_export_tl, R.string.ui_dlg_export_en),
+        DEBUG_TITLE(R.string.ui_debug_title_tl, R.string.ui_debug_title_en),
+        DEBUG_OPEN(R.string.ui_debug_open_tl, R.string.ui_debug_open_en),
         DLG_CLEAR(R.string.ui_dlg_clear_tl, R.string.ui_dlg_clear_en),
         CLEAR_TITLE(R.string.ui_clear_title_tl, R.string.ui_clear_title_en),
         CLEAR_BODY(R.string.ui_clear_body_tl, R.string.ui_clear_body_en),

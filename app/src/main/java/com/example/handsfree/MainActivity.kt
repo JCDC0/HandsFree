@@ -22,6 +22,10 @@ import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.service.OverlayService
 import com.example.handsfree.util.Copy
 import com.example.handsfree.util.CrashLog
+import com.example.handsfree.util.PixelCircleDrawable
+import com.example.handsfree.util.PixelFrameDrawable
+import com.example.handsfree.util.pixelUnit
+import com.example.handsfree.util.setPixelFill
 import com.example.handsfree.util.applySystemBarInsets
 import com.example.handsfree.util.hasAnswerCallPermission
 import com.example.handsfree.util.isAccessibilityServiceEnabled
@@ -70,6 +74,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     private lateinit var wakeWordCaption: TextView
 
     private lateinit var settingsButton: ImageView
+    private lateinit var drawer: androidx.drawerlayout.widget.DrawerLayout
+    private lateinit var debugButton: ImageView
+    private lateinit var debugTitle: TextView
 
     private lateinit var subtitleText: TextView
     private lateinit var statusLabel: TextView
@@ -282,7 +289,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         )
         wakeWordCaption.text = caption
         wakeWordButton.contentDescription = caption
-        wakeWordButton.backgroundTintList = ColorStateList.valueOf(
+        wakeWordButton.setPixelFill(
             themed(if (wakeWordOn) R.color.hf_circle_on_bg else R.color.hf_circle_off_bg)
         )
         wakeWordIcon.imageTintList = ColorStateList.valueOf(
@@ -300,7 +307,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startCaption.text = caption
         startButton.contentDescription = caption
         startIcon.setImageResource(if (running) R.drawable.ic_stop else R.drawable.ic_mic)
-        startButton.backgroundTintList = ColorStateList.valueOf(
+        startButton.setPixelFill(
             themed(if (running) R.color.hf_circle_listening_bg else R.color.hf_circle_idle_bg)
         )
         startIcon.imageTintList = ColorStateList.valueOf(
@@ -318,6 +325,49 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         startButton.alpha = if (enabled) 1f else 0.45f
     }
 
+    /**
+     * W3: the Debug Screen drawer and the pixel-art frames.
+     *
+     * The frames are drawables built in code (util/PixelDrawables.kt), so they
+     * are set here rather than in the layout. The two activators get a
+     * rasterised circle; the drawer cards get a stepped-corner frame. The
+     * system Back key closes an open drawer before it leaves the screen.
+     */
+    private fun setUpDrawerAndPixelFrames() {
+        drawer = findViewById(R.id.main_drawer)
+        debugButton = findViewById(R.id.debug_button)
+        debugTitle = findViewById(R.id.debug_title)
+        debugButton.setOnClickListener {
+            drawer.openDrawer(androidx.core.view.GravityCompat.START)
+        }
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (drawer.isDrawerOpen(androidx.core.view.GravityCompat.START)) {
+                    drawer.closeDrawer(androidx.core.view.GravityCompat.START)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        })
+
+        val border = themed(R.color.hf_px_border)
+        val shadow = themed(R.color.hf_px_shadow)
+        val start = findViewById<View>(R.id.start_button)
+        val wake = findViewById<View>(R.id.wake_word_button)
+        start.background = PixelCircleDrawable(themed(R.color.hf_circle_idle_bg), border, shadow)
+        wake.background = PixelCircleDrawable(themed(R.color.hf_circle_off_bg), border, shadow)
+
+        val unit = start.pixelUnit()
+        listOf(R.id.status_card, R.id.pipeline_card).forEach { id ->
+            findViewById<View>(id).background =
+                PixelFrameDrawable(themed(R.color.hf_card), border, shadow, unit)
+        }
+        findViewById<View>(R.id.warning_card).background =
+            PixelFrameDrawable(themed(R.color.hf_warning_bg), border, shadow, unit)
+    }
+
     /** The state light on the status card. */
     private fun setStatusDot(colorRes: Int) {
         statusDot.backgroundTintList = ColorStateList.valueOf(themed(colorRes))
@@ -327,8 +377,10 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         applySystemBarInsets(R.id.root_scroll)
+        applySystemBarInsets(R.id.debug_drawer)
 
         installCrashHandler()
+        setUpDrawerAndPixelFrames()
 
         statusText = findViewById(R.id.status_text)
         statusDot = findViewById(R.id.status_dot)
@@ -557,6 +609,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         translatedLabel.text = Copy.get(this, Copy.Key.CARD_TRANSLATED)
         intentLabel.text = Copy.get(this, Copy.Key.CARD_INTENT)
         settingsButton.contentDescription = Copy.get(this, Copy.Key.OPEN_SETTINGS)
+        debugTitle.text = Copy.get(this, Copy.Key.DEBUG_TITLE)
+        debugButton.contentDescription = Copy.get(this, Copy.Key.DEBUG_OPEN)
 
         setStartButtonState(running = pipelineActive)
         updateWakeWordButton()

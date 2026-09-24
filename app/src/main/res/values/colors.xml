@@ -16,8 +16,8 @@
       hardcode them, which is why it stayed white on a phone set to dark mode.
       Add a name here and there, and the system picks the right one.
     -->
-    <color name="hf_background">#FAFAFA</color>
-    <color name="hf_card">#FFFFFF</color>
+    <color name="hf_background">#F3EEE3</color>
+    <color name="hf_card">#FFFDF7</color>
 
     <color name="hf_text_primary">#1A1A2E</color>
     <color name="hf_text_body">#333333</color>
@@ -51,13 +51,13 @@
          start button is idle or listening, the call-sign button is off or on.
          Icon colours are named separately because the fill changes underneath
          them and a fixed icon colour fails contrast in one of the two. -->
-    <color name="hf_circle_idle_bg">#1A1A2E</color>
+    <color name="hf_circle_idle_bg">#3057C8</color>
     <color name="hf_circle_idle_icon">#FFFFFF</color>
-    <color name="hf_circle_listening_bg">#1E88E5</color>
+    <color name="hf_circle_listening_bg">#E03131</color>
     <color name="hf_circle_listening_icon">#FFFFFF</color>
-    <color name="hf_circle_off_bg">#ECECEF</color>
-    <color name="hf_circle_off_icon">#4A4A5A</color>
-    <color name="hf_circle_on_bg">#2E7D32</color>
+    <color name="hf_circle_off_bg">#E4DDCC</color>
+    <color name="hf_circle_off_icon">#3A3A50</color>
+    <color name="hf_circle_on_bg">#2F9E44</color>
     <color name="hf_circle_on_icon">#FFFFFF</color>
 
     <!-- Hairline between the three pipeline rows, which now share one card. -->
@@ -66,4 +66,9 @@
     <!-- Cogwheel and back arrow. Muted: they are how you leave the screen,
          not what you came to it for. -->
     <color name="hf_icon_muted">#6B6B7B</color>
+
+    <!-- W3 pixel-art frame. Border and hard drop shadow for PixelFrameDrawable
+         and PixelCircleDrawable. -->
+    <color name="hf_px_border">#1B1B2F</color>
+    <color name="hf_px_shadow">#BDB39C</color>
 </resources>

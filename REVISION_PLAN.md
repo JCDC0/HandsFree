@@ -26,13 +26,35 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | W1 | Code done in `41e66c7` (1.5.3). **Device tests failed 2026-09-24.** Fixes are W1b. | JC's device report, Log 2026-09-24 (device tests) |
 | W1b | **Closed 2026-09-24.** Tests 1 to 4 pass on device (1.5.5 fixes the Test 3 defect, re-tested). Test 5 (TalkBack) dropped by JC. Merged to `master`. | Log 2026-09-24 (W1b closed) |
 | W2 | **Part A done in 1.5.6, device test pending.** Panel item 12. 17 lexicon entries, simulator 18 of 18. Part B (general prefix rule in `TranslationLayer`, `DEV_GUIDE.md` 6a) deferred: Part A answers the panel item, and Part B touches a handle-with-care file on a time budget. | Log 2026-09-24 (W2 Part A) |
-| W3 | Not started. Needed before the app expert receives the APK. Scope widened 2026-09-24: pixel-art popup and a screen-edge listening glow. | |
+| W3 | **Code done in 1.6.0 on branch `w3-redesign`, awaiting JC's review.** Items 1 to 8 done: drawer, stacked activators, pixel-art style, screen-edge glow. Not yet verified: touch pass-through under the glow, light theme. Team feedback to weigh: Harold prefers "normal" buttons (Messenger, 2026-09-24). | Log 2026-09-24 (W3) |
 | W7 | Not started. Spoken announcements (offline text to speech). Requested 2026-09-24. | |
 | W4 | Parked. Not on the panel form. | |
 | W5 | **Cancelled 2026-09-24.** Karl's training setup kept breaking and he decided to keep Hey Jarvis. Not a panel item. | Karl, relayed by JC |
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (W3), Cowork-Claude.** Done while JC was away, per his
+instruction to iterate on the connected phone.
+- 1.5.8 on `master` (`b9da1d1`): export and clear moved into the log dialog
+  at JC's request; history now loads from disk when the service has not
+  started.
+- 1.6.0 on `w3-redesign`: W3 items 1 to 8. Full list in the `CLAUDE.md`
+  CHANGELOG. Two older bugs found by reading logcat during the work and
+  fixed: the floating bubble never appeared (window added off the main
+  thread), and the first press while the model loads was dropped.
+- Verified by adb screenshots on the TECNO LJ9. Unit tests 19 of 19,
+  `assembleDebug` pass.
+- **My error:** `adb shell am start -S` force-stopped the app for a
+  screenshot, which unbinds the accessibility service. Re-enabled with
+  `settings put secure enabled_accessibility_services`. Do not use `-S` on
+  this device.
+- Stopped sending taps when a screenshot showed JC using the phone
+  (Messenger). A tap may have landed while he switched apps; the log shows no
+  command ran. Touch pass-through under the glow is therefore not verified.
+- Team feedback seen in that screenshot, for JC to decide: Harold wrote that
+  "normal" buttons would be better than the pixel style.
+- Not merged to `master`. JC reviews first.
 
 **2026-09-24 (1.5.7 tolerant taps), Cowork-Claude.** JC's 1.5.6 log: the
 `i-` words resolve when Whisper hears them; misses come from mishearing and

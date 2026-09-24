@@ -534,6 +534,47 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.6.0: W3, simplified main screen, pixel-art style, screen-edge glow
+Branch `w3-redesign`, not merged: waiting for JC's review.
+- **Main screen**: the app title, the two activators stacked vertically
+  (148dp), a drawer button top left and the cogwheel top right. Status,
+  Transcribed, Translated and Detected Intent moved into a left drawer headed
+  "Debug Screen" (`Copy.Key.DEBUG_TITLE`), opened by the drawer button or a
+  swipe from the left edge. Back closes the drawer first. All 1.5.x view ids
+  are kept.
+- **Pixel-art style**: `util/PixelDrawables.kt` adds `PixelCircleDrawable`
+  (a circle rasterised on a 20-cell grid, border and hard shadow) for the
+  activators and the bubble, and `PixelFrameDrawable` (stepped corners) for
+  the drawer cards and the popup. `setPixelFill()` replaces
+  `backgroundTintList` on the activators, since a tint flattens the frame.
+  Fonts: Silkscreen (title, small labels) and Pixelify Sans (captions,
+  status), both SIL OFL 1.1, in `res/font`, licences in `assets/licenses`.
+  Transcript text stays in the system font for readability. Icons redrawn on
+  a 12-unit grid: mic, stop, call sign, cogwheel, and a new drawer icon.
+  Palette updated in both colour files.
+- **Screen-edge glow**: `service/EdgeGlowView.kt`, a rotating gradient stroke
+  along the display edge, in its own overlay window owned by
+  `OverlayService`. Blue while listening, amber while transcribing, green or
+  red with the result, removed with the popup. The window is
+  `FLAG_NOT_TOUCHABLE` with alpha 0.8: Android 12+ blocks touches through
+  another app's overlay above 0.8. Full screen via `fitInsetsTypes = 0` and
+  the maximum window bounds. No rotation when system animations are off.
+- **Popup**: pixel frame, inset 16dp from each side, Silkscreen status line.
+- **Fixed, older than W3**: `speechEngine.onReady` ran on the Whisper init
+  thread and called `showBubble()` there, which threw "Can't create handler
+  inside thread" on every start, so the floating bubble never appeared. Now
+  posted to the main thread. The bubble is now visible, redrawn as a pixel
+  circle with the same icons (no emoji).
+- **Fixed, older than W3**: a press while the model was loading was dropped
+  ("Rejected activation: speech engine not ready"), so the first press after
+  opening the app did nothing. It is now kept and starts listening when the
+  model is ready (`pendingStartWhenReady`).
+- Checked on the device by screenshot: main screen, drawer, popup and glow
+  in the listening and transcribing states, bubble, deferred first press.
+  Not checked on the device: taps passing through the glow (testing stopped
+  when JC started using the phone), the success and failure glow colours,
+  and the light theme.
+
 ### 2026-09-24: 1.5.8: export and clear move into the log dialog
 At JC's request.
 - The "Export log for Google Form" button is removed from Settings. The

@@ -8,8 +8,8 @@
       shadows still read, and the accent blues are lightened because #1565C0 on
       a dark surface fails contrast badly.
     -->
-    <color name="hf_background">#121212</color>
-    <color name="hf_card">#1E1E1E</color>
+    <color name="hf_background">#141422</color>
+    <color name="hf_card">#20203A</color>
 
     <color name="hf_text_primary">#ECECEC</color>
     <color name="hf_text_body">#D5D5D5</color>
@@ -32,15 +32,20 @@
     <color name="hf_status_success">#81C784</color>
     <color name="hf_status_error">#EF5350</color>
 
-    <color name="hf_circle_idle_bg">#3A3A5C</color>
+    <color name="hf_circle_idle_bg">#4263EB</color>
     <color name="hf_circle_idle_icon">#FFFFFF</color>
-    <color name="hf_circle_listening_bg">#2A6FB5</color>
+    <color name="hf_circle_listening_bg">#F03E3E</color>
     <color name="hf_circle_listening_icon">#FFFFFF</color>
-    <color name="hf_circle_off_bg">#2C2C2C</color>
-    <color name="hf_circle_off_icon">#CFCFCF</color>
-    <color name="hf_circle_on_bg">#2E6B33</color>
+    <color name="hf_circle_off_bg">#2A2A40</color>
+    <color name="hf_circle_off_icon">#D0D0DC</color>
+    <color name="hf_circle_on_bg">#37B24D</color>
     <color name="hf_circle_on_icon">#FFFFFF</color>
 
     <color name="hf_divider">#2E2E2E</color>
     <color name="hf_icon_muted">#A2A2AE</color>
+    <color name="hf_button_danger_bg">#E03131</color>
+    <color name="hf_button_danger_text">#FFFFFF</color>
+
+    <color name="hf_px_border">#E6E6F0</color>
+    <color name="hf_px_shadow">#000000</color>
 </resources>

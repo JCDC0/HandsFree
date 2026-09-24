@@ -115,6 +115,10 @@
     <string name="ui_dlg_copy_en">Copy to Clipboard</string>
     <string name="ui_dlg_close_tl">Isara</string>
     <string name="ui_dlg_close_en">Close</string>
+    <string name="ui_debug_title_tl">Debug Screen</string>
+    <string name="ui_debug_title_en">Debug Screen</string>
+    <string name="ui_debug_open_tl">Buksan ang Debug Screen</string>
+    <string name="ui_debug_open_en">Open the Debug Screen</string>
     <string name="ui_dlg_export_tl">I-export</string>
     <string name="ui_dlg_export_en">Export</string>
     <string name="ui_dlg_clear_tl">Burahin</string>

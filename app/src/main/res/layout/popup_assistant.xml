@@ -1,19 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  The assistant popup, W3 pixel-art style. The frame is a PixelFrameDrawable
+  set in OverlayService.showAssistantPopup(); bg_assistant_popup here is only
+  the fallback. Colours are literal because this popup is always a dark panel
+  over whatever app is open, whatever the system theme.
+
+  Silkscreen for the status word, Pixelify Sans for the result line. The
+  transcript stays in the system font at 18sp so it is readable at a glance.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/bg_assistant_popup"
-    android:padding="20dp"
-    android:elevation="8dp">
+    android:paddingStart="22dp"
+    android:paddingEnd="26dp"
+    android:paddingTop="18dp"
+    android:paddingBottom="22dp">
 
-    <!--
-      Warning bar, above everything else in the box so it is the first thing
-      read. Hidden unless a command ran into something outside the app's control
-      (today: a web search with no connection). Colours are literal here, unlike
-      activity_main.xml, because this popup is always drawn on the same dark
-      panel regardless of the system theme.
-    -->
+    <!-- Warning bar, first in the box so it is read first. Hidden unless a
+         command ran into something outside the app's control (today: a web
+         search with no connection). -->
     <TextView
         android:id="@+id/popup_warning_text"
         android:layout_width="match_parent"
@@ -33,8 +40,8 @@
         android:layout_height="wrap_content"
         android:text="Listening..."
         android:textSize="14sp"
-        android:textColor="#BDBDBD"
-        android:textStyle="italic"
+        android:fontFamily="@font/silkscreen"
+        android:textColor="#9FB4FF"
         android:layout_marginBottom="8dp" />
 
     <TextView
@@ -52,7 +59,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text=""
-        android:textSize="14sp"
+        android:textSize="16sp"
+        android:fontFamily="@font/pixelify_sans"
         android:textColor="#81C784"
         android:visibility="gone" />
 

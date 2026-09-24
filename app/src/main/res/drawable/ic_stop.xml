@@ -1,10 +1,10 @@
-<!-- Stop-listening glyph. Pairs with ic_mic in the same circle. -->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stop glyph, W3 pixel-art style: a plain square on a 12-unit grid. Square
+     corners on purpose: a stepped square at this size read as a dot. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M8.2,6.5 h7.6 a1.7,1.7 0 0,1 1.7,1.7 v7.6 a1.7,1.7 0 0,1 -1.7,1.7 h-7.6 a1.7,1.7 0 0,1 -1.7,-1.7 v-7.6 a1.7,1.7 0 0,1 1.7,-1.7 z" />
+    android:viewportWidth="12"
+    android:viewportHeight="12">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M3,3h6v6h-6z" />
 </vector>

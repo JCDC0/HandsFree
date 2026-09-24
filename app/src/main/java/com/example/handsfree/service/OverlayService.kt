@@ -33,6 +33,10 @@ import com.example.handsfree.pipeline.WakeWordDetector
 import com.example.handsfree.pipeline.WhisperOnnxEngine
 import com.example.handsfree.util.Copy
 import com.example.handsfree.util.CrashLog
+import com.example.handsfree.util.PixelCircleDrawable
+import com.example.handsfree.util.PixelFrameDrawable
+import com.example.handsfree.util.pixelUnit
+import com.example.handsfree.util.setPixelFill
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -86,6 +90,13 @@ class OverlayService : Service() {
     @Volatile private var listenStartedAt = 0L
 
     /**
+     * An explicit press that arrived while the model was still loading. The
+     * first press after the app starts the service used to be dropped, which
+     * reads as a dead button; now it starts listening once the model is ready.
+     */
+    @Volatile private var pendingStartWhenReady = false
+
+    /**
      * True while the popup shows a command result or the retry message. The
      * IDLE status that follows a result must leave it up for its linger time;
      * every other IDLE dismisses the popup.
@@ -102,13 +113,15 @@ class OverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var bubbleView: View? = null
-    private var bubbleLabel: TextView? = null
+    private var bubbleLabel: android.widget.ImageView? = null
 
     private var popupView: View? = null
     private var popupStatusText: TextView? = null
     private var popupTranscriptionText: TextView? = null
     private var popupIntentText: TextView? = null
     private var popupWarningText: TextView? = null
+
+    private var glowView: EdgeGlowView? = null
 
     private val hidePopupRunnable = Runnable {
         dismissAssistantPopup()
@@ -215,9 +228,18 @@ class OverlayService : Service() {
             Log.i(TAG, "${speechEngine.displayName} ready")
             CrashLog.info(this@OverlayService, "engine ready: ${speechEngine.displayName}")
             emitStatus(STATUS_IDLE)
-            showBubble()
-            if (wakeWordEnabled && stateMachine.isIdle && !stateMachine.isKwsListening) {
-                startKwsListening()
+            // onReady runs on the engine's init thread. Window work must run on
+            // the main thread: adding the bubble from here threw "Can't create
+            // handler inside thread" (seen in logcat 2026-09-24), so the bubble
+            // never appeared.
+            mainHandler.post {
+                showBubble()
+                if (pendingStartWhenReady) {
+                    pendingStartWhenReady = false
+                    startListening(explicit = true)
+                } else if (wakeWordEnabled && stateMachine.isIdle && !stateMachine.isKwsListening) {
+                    startKwsListening()
+                }
             }
         }
         speechEngine.onError = { e -> handleBackendError(e) }
@@ -236,8 +258,9 @@ class OverlayService : Service() {
 
     private fun startListening(explicit: Boolean = true, awaitingCommand: Boolean = false) {
         if (!speechEngine.isReady) {
-            Log.w(TAG, "Rejected activation: speech engine not ready")
-            CrashLog.info(this, "rejected activation: speech engine not ready")
+            if (explicit) pendingStartWhenReady = true
+            Log.w(TAG, "Deferred activation: speech engine not ready (starts when ready: $explicit)")
+            CrashLog.info(this, "activation deferred: speech engine not ready")
             return
         }
         val previousKws = stateMachine.isKwsListening
@@ -608,17 +631,21 @@ class OverlayService : Service() {
         val wm = getSystemService(WindowManager::class.java) ?: return
         windowManager = wm
 
-        val label = TextView(this).apply {
-            text = "🎤"
-            textSize = 24f
-            setPadding(28, 20, 28, 24)
-            setBackgroundResource(R.drawable.bubble_background)
+        val density = resources.displayMetrics.density
+        val label = android.widget.ImageView(this).apply {
+            val pad = (15 * density).toInt()
+            setPadding(pad, pad, pad, pad)
+            background = PixelCircleDrawable(BUBBLE_IDLE, POPUP_BORDER, POPUP_SHADOW, cells = 14)
+            setImageResource(R.drawable.ic_mic)
+            imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+            contentDescription = "HandsFree"
         }
         bubbleLabel = label
+        val bubbleSize = (BUBBLE_SIZE_DP * density).toInt()
 
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            bubbleSize,
+            bubbleSize,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
@@ -671,8 +698,23 @@ class OverlayService : Service() {
         }
     }
 
-    private fun updateBubble(glyph: String, @Suppress("UNUSED_PARAMETER") tint: Int) {
-        mainHandler.post { bubbleLabel?.text = glyph }
+    /**
+     * Repaint the bubble for the pipeline state. W3 replaced the emoji glyphs
+     * with the pixel icons used on the main screen; callers still pass the
+     * old glyph and tint, and the tint picks the state: red listening, grey
+     * call-sign listening, anything else idle.
+     */
+    private fun updateBubble(@Suppress("UNUSED_PARAMETER") glyph: String, tint: Int) {
+        mainHandler.post {
+            val view = bubbleLabel ?: return@post
+            val (icon, fill) = when (tint) {
+                0xFFE53935.toInt() -> R.drawable.ic_stop to BUBBLE_LISTENING
+                0xFF78909C.toInt() -> R.drawable.ic_call_sign to BUBBLE_KWS
+                else -> R.drawable.ic_mic to BUBBLE_IDLE
+            }
+            view.setImageResource(icon)
+            view.setPixelFill(fill)
+        }
     }
 
     private fun hideBubble() {
@@ -692,6 +734,10 @@ class OverlayService : Service() {
 
         val inflater = android.view.LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.popup_assistant, null)
+        val unit = view.pixelUnit()
+        view.background = PixelFrameDrawable(
+            POPUP_FILL, POPUP_BORDER, POPUP_SHADOW, unit
+        )
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -702,6 +748,7 @@ class OverlayService : Service() {
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             y = 100
+            width = resources.displayMetrics.widthPixels - (2 * POPUP_SIDE_MARGIN_DP * resources.displayMetrics.density).toInt()
             windowAnimations = android.R.style.Animation_Dialog
         }
 
@@ -723,6 +770,59 @@ class OverlayService : Service() {
         }
     }
 
+    /**
+     * Show the screen-edge glow, or change its state if it is already up.
+     *
+     * The window never takes touches: FLAG_NOT_TOUCHABLE, plus an alpha of
+     * [GLOW_WINDOW_ALPHA]. From Android 12 the system blocks touches that
+     * pass through an overlay window from another app when its alpha is
+     * above 0.8, even when the window is not touchable. Without that cap the
+     * glow would freeze the phone while HandsFree listens.
+     *
+     * Called only from the main handler, like the popup, so show, restyle and
+     * remove cannot interleave.
+     */
+    private fun showGlow(state: EdgeGlowView.State) {
+        glowView?.let { it.state = state; return }
+        if (!Settings.canDrawOverlays(this)) return
+        val wm = getSystemService(WindowManager::class.java) ?: return
+        windowManager = wm
+        val view = EdgeGlowView(this).apply { this.state = state }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            alpha = GLOW_WINDOW_ALPHA
+            layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            fitInsetsTypes = 0
+            val real = wm.maximumWindowMetrics.bounds
+            width = real.width()
+            height = real.height()
+            gravity = Gravity.TOP or Gravity.START
+        }
+        runCatching {
+            wm.addView(view, params)
+            glowView = view
+        }.onFailure {
+            Log.e(TAG, "glow add failed", it)
+            CrashLog.exception(this, "glow addView failed", it)
+        }
+    }
+
+    private fun hideGlow() {
+        val v = glowView ?: return
+        glowView = null
+        runCatching { (windowManager ?: getSystemService(WindowManager::class.java))?.removeView(v) }
+            .onFailure { CrashLog.exception(this, "glow removeView failed", it) }
+    }
+
     private fun hideAssistantPopup(delayMs: Long = 0L) {
         mainHandler.removeCallbacks(hidePopupRunnable)
         if (delayMs <= 0L) {
@@ -734,6 +834,7 @@ class OverlayService : Service() {
 
     private fun dismissAssistantPopup() {
         popupShowsResult = false
+        hideGlow()
         val v = popupView ?: return
         val wm = windowManager ?: getSystemService(WindowManager::class.java)
         runCatching { wm?.removeView(v) }
@@ -763,6 +864,7 @@ class OverlayService : Service() {
         when (s) {
             STATUS_PREPARING -> popupStatusText?.text = "Preparing..."
             STATUS_LISTENING -> {
+                showGlow(EdgeGlowView.State.LISTENING)
                 showAssistantPopup()
                 popupStatusText?.text = "Listening..."
                 popupTranscriptionText?.text = "..."
@@ -770,10 +872,14 @@ class OverlayService : Service() {
                 popupWarningText?.visibility = View.GONE
             }
             STATUS_KWS_LISTENING -> Unit
-            STATUS_TRANSCRIBING -> popupStatusText?.text = "Transcribing..."
+            STATUS_TRANSCRIBING -> {
+                popupStatusText?.text = "Transcribing..."
+                glowView?.state = EdgeGlowView.State.TRANSCRIBING
+            }
             STATUS_IDLE -> if (!popupShowsResult) hideAssistantPopup(0L)
             STATUS_MODEL_ERROR -> {
                 popupShowsResult = true
+                glowView?.state = EdgeGlowView.State.FAILURE
                 popupStatusText?.text = "Error"
                 popupStatusText?.setTextColor(android.graphics.Color.RED)
                 hideAssistantPopup(3000L)
@@ -786,6 +892,7 @@ class OverlayService : Service() {
         mainHandler.post {
             pipelineListener?.onCommandExecuted(i, ok, m, warning)
             popupShowsResult = popupView != null
+            glowView?.state = if (ok) EdgeGlowView.State.SUCCESS else EdgeGlowView.State.FAILURE
             popupIntentText?.visibility = View.VISIBLE
             popupIntentText?.text = if (ok) "$i: $m" else "$i FAILED: $m"
             popupIntentText?.setTextColor(if (ok) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#E57373"))
@@ -812,6 +919,7 @@ class OverlayService : Service() {
         popupIntentText?.visibility = View.GONE
         popupWarningText?.visibility = View.GONE
         popupShowsResult = popupView != null
+        glowView?.state = EdgeGlowView.State.FAILURE
         hideAssistantPopup(RETRY_LINGER_MS)
         runCatching { startForegroundCompat(buildNotification(message)) }
     }
@@ -862,6 +970,7 @@ class OverlayService : Service() {
         mainHandler.removeCallbacks(rearmRunnable)
         mainHandler.removeCallbacks(sleepRunnable)
         hideAssistantPopup(0L)
+        hideGlow()
         hideBubble()
         runCatching { audioPreprocessor.release() }
         runCatching { speechEngine.release() }
@@ -952,6 +1061,26 @@ class OverlayService : Service() {
         const val LISTEN_GRACE_MS = 2000L
 
         private const val RETRY_LINGER_MS = 2000L
+
+        /**
+         * Window alpha for the edge glow. Android 12+ blocks touches passing
+         * through another app's overlay above 0.8 alpha. Do not raise it.
+         */
+        private const val GLOW_WINDOW_ALPHA = 0.8f
+
+        /** Popup frame colours. Always a dark panel, whatever the theme. */
+        private const val POPUP_FILL = 0xF216162A.toInt()
+        private const val POPUP_BORDER = 0xFFE6E6F0.toInt()
+        private const val POPUP_SHADOW = 0x99000000.toInt()
+
+        /** Gap between the popup and each side of the screen, so its frame reads. */
+        private const val POPUP_SIDE_MARGIN_DP = 16
+
+        /** Floating bubble: size and the fill for each state. */
+        private const val BUBBLE_SIZE_DP = 60
+        private const val BUBBLE_IDLE = 0xFF4263EB.toInt()
+        private const val BUBBLE_LISTENING = 0xFFF03E3E.toInt()
+        private const val BUBBLE_KWS = 0xFF495057.toInt()
 
         /**
          * Trailing silence cannot end a session sooner than this after

@@ -1,29 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
 <!--
-  Start-listening glyph. Hand-written paths, not an imported icon set: the app
-  has no icon dependency and one microphone is not worth adding one.
+  Start-listening glyph, W3 pixel-art style: a microphone drawn on a 12-unit
+  grid with square cells, so it matches the pixel circles it sits in.
+  Hand-written paths; the app has no icon dependency.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-
-    <!-- Capsule -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,2 m-3.2,0 a3.2,3.2 0 0,1 6.4,0 v7.4 a3.2,3.2 0 0,1 -6.4,0 z" />
-
-    <!-- Pickup arc and stand -->
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000"
-        android:pathData="M5.8,10.6 v0.9 a6.2,6.2 0 0,0 12.4,0 v-0.9" />
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000"
-        android:pathData="M12,17.7 v3.3" />
+    android:viewportWidth="12"
+    android:viewportHeight="12">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M5,1h2v1h1v5h-1v1h-2v-1h-1v-5h1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M2,5h1v2h-1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M3,7h1v1h-1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M4,8h4v1h-4z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M8,7h1v1h-1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M9,5h1v2h-1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M5,9h2v1h-2z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M3,10h6v1h-6z" />
 </vector>

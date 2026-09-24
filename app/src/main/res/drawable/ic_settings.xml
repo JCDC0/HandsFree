@@ -1,32 +1,21 @@
-<!--
-  Cogwheel. Eight teeth drawn as four rotated pairs rather than one long path,
-  so the shape stays readable and editable.
--->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings cogwheel, W3 pixel-art style: a ring with eight teeth and a
+     square hole, on a 12-unit grid. The hole is cut with evenOdd. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-
+    android:viewportWidth="12"
+    android:viewportHeight="12">
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#FFFFFFFF"
         android:fillType="evenOdd"
-        android:pathData="M12,12 m-8.4,0 a8.4,8.4 0 1,0 16.8,0 a8.4,8.4 0 1,0 -16.8,0 M12,12 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
-
-    <group android:pivotX="12" android:pivotY="12" android:rotation="0">
-        <path android:fillColor="#FFFFFF"
-            android:pathData="M9.9,1.7 h4.2 v4.6 h-4.2 z M9.9,17.7 h4.2 v4.6 h-4.2 z" />
-    </group>
-    <group android:pivotX="12" android:pivotY="12" android:rotation="45">
-        <path android:fillColor="#FFFFFF"
-            android:pathData="M9.9,1.7 h4.2 v4.6 h-4.2 z M9.9,17.7 h4.2 v4.6 h-4.2 z" />
-    </group>
-    <group android:pivotX="12" android:pivotY="12" android:rotation="90">
-        <path android:fillColor="#FFFFFF"
-            android:pathData="M9.9,1.7 h4.2 v4.6 h-4.2 z M9.9,17.7 h4.2 v4.6 h-4.2 z" />
-    </group>
-    <group android:pivotX="12" android:pivotY="12" android:rotation="135">
-        <path android:fillColor="#FFFFFF"
-            android:pathData="M9.9,1.7 h4.2 v4.6 h-4.2 z M9.9,17.7 h4.2 v4.6 h-4.2 z" />
-    </group>
+        android:pathData="M3,3h6v6h-6z M5,5v2h2v-2z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M5,1h2v2h-2z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M5,9h2v2h-2z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M1,5h2v2h-2z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M9,5h2v2h-2z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M2,2h1v1h-1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M9,2h1v1h-1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M2,9h1v1h-1z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M9,9h1v1h-1z" />
 </vector>
