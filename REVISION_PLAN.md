@@ -23,14 +23,45 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 
 | ID | State | Evidence |
 |---|---|---|
-| W1 | Code done in `41e66c7` (1.5.3). Unit tests green. **Device tests pending.** | `AppStateMachineTest`, build stamp `41e66c7` |
+| W1 | Code done in `41e66c7` (1.5.3). **Device tests failed 2026-09-24.** Fixes are W1b. | JC's device report, Log 2026-09-24 (device tests) |
+| W1b | **Next.** Five defects found by the W1 device tests, plus test card fixes. See the W1b section. | |
 | W2 | Not started. Panel item 12: "make it understand i-click or remove the hyphen". `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
-| W3 | Not started. Needed before the app expert receives the APK. | |
+| W3 | Not started. Needed before the app expert receives the APK. Scope widened 2026-09-24: pixel-art popup and a screen-edge listening glow. | |
+| W7 | Not started. Spoken announcements (offline text to speech). Requested 2026-09-24. | |
 | W4 | Parked. Not on the panel form. | |
 | W5 | **Cancelled 2026-09-24.** Karl's training setup kept breaking and he decided to keep Hey Jarvis. Not a panel item. | Karl, relayed by JC |
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (device tests), Cowork-Claude.** JC ran the W1 test card on the
+TECNO LJ9 with 1.5.3-tester, versionCode 9, installed clean. Result: W1 is not
+closed. Tests 1 to 4 failed, Test 5 was not run (JC has not used TalkBack; the
+package `com.google.android.marvin.talkback` is installed). JC's report, and
+the cause found in the code or on the phone for each:
+- Test 1. A press during transcription is rejected, but the popup can sit on
+  "Transcribing..." forever. Cause, read in `OverlayService.emitStatus`:
+  `STATUS_IDLE` sets the popup text to "Transcribing...", and the popup is
+  dismissed only by `emitCommand` or an error. Every path that returns to IDLE
+  without a command (blank transcript, wake gate rejects, stop) leaves it up.
+  The watchdog allows the listen window plus 20 s, so a true hang also takes
+  about 24 s to clear. JC asks for a 10 s cap on transcription.
+- Test 2. With the call sign on, pressing Stop Listening kills the call sign
+  while the toggle still reads On. Cause: `ACTION_STOP_PIPELINE` sets
+  `wakeWordEnabled = false` and never re-arms.
+- Test 3. After the app is closed, the mic may respond but no popup shows,
+  then the accessibility service shows "Not working. This service is
+  malfunctioning." A toast reads "Held volume keys. HandsFree On/Off".
+  Causes, checked with adb: `accessibility_shortcut_target_service` is set to
+  HandsFree, so holding both volume keys, which is also our own both-keys
+  activator, makes Android toggle the whole service. The app is also not on
+  the battery exemption list, and HiOS kills the process when the app is
+  swiped away, which leaves an enabled service that is not running.
+- Test 4. The exported log held nothing from Tests 1 and 2. Cause:
+  `CrashLog.reset()` runs in `OverlayService.onCreate`, so every service
+  restart (Test 3) wipes the log.
+- No app crash is in `adb logcat -b crash`.
+Not verified: the exact moment HiOS kills the process. W1b item 5 measures it.
 
 **2026-09-24 (later), Cowork-Claude.**
 - W5 cancelled. Karl reports the wake-word training breaks on his system and has
@@ -77,8 +108,12 @@ can be trusted. W5 starts in parallel because it has the longest lead time.
 | W2 | Tagalog `i-` prefix normalization | Low | Nothing |
 | W3 | Main screen simplification | Low | Nothing |
 | W4 | Structured command layer | Medium | Nothing |
-| W5 | Train a real "Hey HandsFree" detector | Medium | Nothing, run in parallel |
+| W5 | Train a real "Hey HandsFree" detector (cancelled) | Medium | Nothing, run in parallel |
 | W6 | Update docs to match | Low | Everything above |
+| W1b | Fixes from the W1 device tests | High | W2, W3, W7 testing |
+| W7 | Spoken announcements | Low | Nothing; after W3 |
+
+Order after 2026-09-24: W1b, then W2, then W3 (with the visual pass), then W7.
 
 Do not attempt W1 through W4 in a single session. One workstream, one build, one
 commit.
@@ -153,6 +188,71 @@ adding more booleans.
 
 **Do not** change `WhisperOnnxEngine.kt`, `LevenshteinMatcher.kt`,
 `TranslationLayer.kt` or `DfsNodeLocator.kt` in this workstream.
+
+---
+
+## W1b. Fixes from the W1 device tests
+
+Six items, one build, one commit, then JC re-runs the W1 test card. Order of
+work: items 1 to 4 are code in `OverlayService.kt` and `CrashLog.kt`; item 5
+is code plus a device check; item 6 is the test card.
+
+**1. Popup never left on "Transcribing".** Add `STATUS_TRANSCRIBING`, emitted
+by `stopListening()` when the state goes to PREPROCESSING. Only that status
+shows "Transcribing...". `STATUS_IDLE` must dismiss the popup unless a result
+is being shown (`emitCommand` already schedules its own linger). Check every
+path that reaches IDLE: blank transcript in `flushWhisperUtterance`, wake gate
+null in `handleUtterance`, no match, rejection, watchdog, explicit stop.
+
+**2. Transcription cap of 10 s.** Split the watchdog in two: the LISTENING
+state keeps its cap (the listen window, already enforced by `sleepRunnable`);
+the states PREPROCESSING to EXECUTING get their own cap,
+`INFERENCE_TIMEOUT_MS = 10000L`. On expiry: return to IDLE, dismiss the popup,
+show "Hindi naintindihan, subukan ulit" for 2 s, re-arm the call sign. The
+native ONNX call cannot be killed (known limit, `DEV_GUIDE.md` section 6), so
+give each activation a session number and drop any result whose number is not
+the current one. Without that, a late result from a timed-out run executes a
+command the user no longer expects.
+
+**3. Stop Listening must not turn off the call sign.** Remove
+`wakeWordEnabled = false` from `ACTION_STOP_PIPELINE`. After the stop, call
+`scheduleRearm()`. Only `ACTION_SET_WAKE_WORD` changes the setting. Persist the
+setting in `handsfree_prefs` and read it in `onCreate`, so a service restart
+does not drop it while `MainActivity` still shows On. `MainActivity` reads the
+toggle state from the same preference.
+
+**4. Keep the log across restarts.** `CrashLog.reset()` in
+`OverlayService.onCreate` wipes the evidence of whatever killed the previous
+instance. Rotate instead: move the current file to `crash_prev.log`, start a
+new one, and include both in the export, with a header line per service start
+(time, build stamp, reason if known).
+
+**5. Survive the app being closed.** Two causes, both confirmed with adb on
+the TECNO LJ9:
+- The Android accessibility shortcut targets HandsFree
+  (`accessibility_shortcut_target_service`). Holding both volume keys for
+  about 3 s toggles the whole service. Our both-keys activator uses the same
+  gesture. Remove the both-keys path in `HandsFreeAccessibilityService`
+  (`checkBothKeysActivation`, `BOTH_KEYS_HOLD_MS`). Keep volume-down hold, the
+  accessibility button, the bubble, and the call sign. Add a line to the
+  first-run screen: do not assign HandsFree to the volume-key shortcut.
+- HiOS kills background apps. Add a first-run step that requests
+  `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` for the package (needs the
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission) and tells the tester to
+  lock HandsFree in Recents. Check the result with
+  `adb shell dumpsys deviceidle whitelist`.
+- Device check: swipe the app from Recents, wait 60 s, press the accessibility
+  button, and read `adb shell dumpsys accessibility` for the service state.
+  Record whether the process survived.
+
+**6. Test card corrections.** Test 2 toggles the call sign with the second
+round button on the main screen, not in settings. Test 3 adds the
+closed-app check above. Test 5 gives the TalkBack steps: Settings,
+Accessibility, TalkBack, On; a double tap activates a control while it runs.
+
+**Verification.** `./gradlew assembleDebug` and the unit tests pass. Add a
+unit test for the session-number drop and one for the inference cap using a
+fake executor. JC re-runs Tests 1 to 5 on the phone.
 
 ---
 
@@ -271,12 +371,34 @@ direction rather than starting over.
 - The drawer must not cover the bubble overlay, which is a separate window owned
   by `OverlayService`.
 
+**Visual pass, added 2026-09-24 at JC's request**
+
+7. Pixel-art style for the popup and the main screen. Bundle a pixel font
+   licensed under the SIL Open Font License in `res/font` (no download at
+   runtime; the app has no `INTERNET` permission). Use it for headings,
+   status words and button captions only. Keep the transcript and the result
+   line in the system font, since a pixel font at small sizes is hard to read
+   for the low-vision users the study now recruits. Square corners, a 2 to 4dp
+   stepped border drawn as a 9-patch or a layer-list, a limited palette
+   defined in `colors.xml` and `values-night/colors.xml`. Keep text contrast
+   at 4.5:1 or better.
+8. Screen-edge listening glow. A second overlay window,
+   `TYPE_APPLICATION_OVERLAY`, `MATCH_PARENT` both ways, flags
+   `FLAG_NOT_FOCUSABLE or FLAG_NOT_TOUCHABLE or FLAG_LAYOUT_IN_SCREEN`, owned
+   by `OverlayService`. A custom view draws a rounded-rectangle stroke along
+   the screen edge with a moving gradient. Colour by state: listening,
+   transcribing, success, failure. Shown on LISTENING, removed on IDLE, in the
+   same handler block as the popup (W1 rule 5). It must pass all touches
+   through, or the app blocks the phone. Respect the system "Remove
+   animations" setting: draw a static border when animator duration scale is 0.
+
 **Verification**
 
 Install on a device, walk the first-run flow from a clean install
 (`adb uninstall ph.edu.hau.handsfree` first), open the drawer, run one command,
 and confirm all four pipeline fields update inside the drawer. Toggle the
-language and confirm the drawer header and every moved label follow.
+language and confirm the drawer header and every moved label follow. With the
+glow showing, tap an app icon under it and confirm the tap reaches the app.
 
 ---
 
@@ -369,6 +491,37 @@ two sessions to find once already:
 **Keep the feature off by default.** Always-on listening keeps the microphone
 open and runs three models on every 80ms of audio. That is a battery and privacy
 cost nobody should pay without opting in, and the manuscript says so.
+
+---
+
+## W7. Spoken announcements
+
+**The request**: a short spoken line so the user hears what the app is doing,
+for example "Nakikinig" on activation and "Binubuksan ang YouTube" on success.
+
+**The work**
+
+1. Use `android.speech.tts.TextToSpeech`, owned by `OverlayService`. Pick a
+   voice where `isNetworkConnectionRequired` is false, so no speech leaves the
+   phone. Try `fil-PH` first, then `en-US`. Log which voice was chosen. Check
+   on the TECNO LJ9 whether an offline Filipino voice is installed; do not
+   assume one is.
+2. Never speak while the mic is open. Speak the activation cue, wait for
+   `UtteranceProgressListener.onDone`, then start capture. Otherwise Whisper
+   transcribes the app's own voice.
+3. If TalkBack is running (`AccessibilityManager.isTouchExplorationEnabled`),
+   send the line with `announceForAccessibility` instead of our own voice, so
+   the user does not hear two voices.
+4. Add a setting to turn announcements off, default on. Lines go in `Copy.kt`
+   so they follow the Tagalog and English toggle.
+5. Lines only for: activation, "did not understand", command result, error.
+   No speech during idle or call-sign listening.
+
+**Verification**
+
+On the device: one command with announcements on, one with them off, one with
+TalkBack on. Confirm the exported log shows no transcript of the app's own
+announcement.
 
 ---
 
