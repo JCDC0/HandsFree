@@ -123,6 +123,18 @@
     <string name="ui_style_switch_en">Pixel-art style</string>
     <string name="ui_bubble_switch_tl">Lumulutang na mic button</string>
     <string name="ui_bubble_switch_en">Floating mic button</string>
+    <string name="ui_speech_switch_tl">Boses na sagot</string>
+    <string name="ui_speech_switch_en">Spoken feedback</string>
+    <!-- W7 spoken lines. Short on purpose: the mic opens only after the
+         activation line ends, so every syllable is waiting time. -->
+    <string name="say_listening_tl">Nakikinig</string>
+    <string name="say_listening_en">Listening</string>
+    <string name="say_not_understood_tl">Hindi ko naintindihan</string>
+    <string name="say_not_understood_en">Sorry, I did not catch that</string>
+    <string name="say_failed_tl">Hindi ko nagawa</string>
+    <string name="say_failed_en">That did not work</string>
+    <string name="say_error_tl">May problema sa app</string>
+    <string name="say_error_en">Something went wrong</string>
     <string name="ui_dlg_export_tl">I-export</string>
     <string name="ui_dlg_export_en">Export</string>
     <string name="ui_dlg_clear_tl">Burahin</string>

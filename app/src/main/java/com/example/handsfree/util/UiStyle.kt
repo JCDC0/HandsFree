@@ -37,6 +37,17 @@ object UiStyle {
     fun bubbleEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_BUBBLE, true)
 
+    const val PREF_SPEECH = "speech_enabled"
+
+    /** W7 spoken feedback. Default on. */
+    fun speechEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_SPEECH, true)
+
+    fun setSpeechEnabled(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(PREF_SPEECH, on).apply()
+    }
+
     fun setBubbleEnabled(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(PREF_BUBBLE, on).apply()

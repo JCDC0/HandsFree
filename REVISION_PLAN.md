@@ -27,7 +27,7 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | W1b | **Closed 2026-09-24.** Tests 1 to 4 pass on device (1.5.5 fixes the Test 3 defect, re-tested). Test 5 (TalkBack) dropped by JC. Merged to `master`. | Log 2026-09-24 (W1b closed) |
 | W2 | **Part A done in 1.5.6, device test pending.** Panel item 12. 17 lexicon entries, simulator 18 of 18. Part B (general prefix rule in `TranslationLayer`, `DEV_GUIDE.md` 6a) deferred: Part A answers the panel item, and Part B touches a handle-with-care file on a time budget. | Log 2026-09-24 (W2 Part A) |
 | W3 | **Code done in 1.6.1 on branch `w3-redesign`, awaiting JC's review.** Items 1 to 8 done: drawer, stacked activators, pixel-art style, screen-edge glow. 1.6.1 adds a Pixel-art style switch in the drawer (standard look when off), answering Harold's preference for normal buttons, and centres the activator icons. Not yet verified: touch pass-through under the glow, light theme. | Log 2026-09-24 (W3), CHANGELOG 1.6.1 |
-| W7 | Not started. Spoken announcements (offline text to speech). Requested 2026-09-24. | |
+| W7 | **Code done in 1.7.0 on `w3-redesign`.** Offline text-to-speech feedback with the mic gated during speech; Settings switch. Device-checked: voice selection, capture gate timing. Not yet checked by ear by JC. | CHANGELOG 1.7.0 |
 | W4 | Parked. Not on the panel form. | |
 | W5 | **Cancelled 2026-09-24.** Karl's training setup kept breaking and he decided to keep Hey Jarvis. Not a panel item. | Karl, relayed by JC |
 | W6 | Continues with each workstream. | |

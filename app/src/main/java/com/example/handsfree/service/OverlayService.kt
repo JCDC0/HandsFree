@@ -96,6 +96,12 @@ class OverlayService : Service() {
      */
     @Volatile private var pendingStartWhenReady = false
 
+    private lateinit var announcer: Announcer
+
+    /** True while a feedback line plays. The capture callback drops audio then. */
+    @Volatile private var announcing = false
+    private var announceToken = 0
+
     /**
      * True while the popup shows a command result or the retry message. The
      * IDLE status that follows a result must leave it up for its linger time;
@@ -180,6 +186,7 @@ class OverlayService : Service() {
         }.onFailure { Log.e(TAG, "Failed to load transcript history", it) }
 
         audioPreprocessor = AudioPreprocessor(this)
+        announcer = Announcer(this)
         commandExecutor = CommandExecutor(this)
         keywordSpotter = KeywordSpotter(this)
 
@@ -279,12 +286,70 @@ class OverlayService : Service() {
         }
         emitStatus(STATUS_LISTENING)
         updateBubble("●", 0xFFE53935.toInt())
+        if (UiStyle.speechEnabled(this)) {
+            announce(say(Copy.Key.SAY_LISTENING)) {
+                if (stateMachine.isCurrentSession(session) && stateMachine.isListening) {
+                    beginCapture()
+                }
+            }
+        } else {
+            beginCapture()
+        }
+    }
+
+    /**
+     * Open the listening window: reset the silence detector, start capture,
+     * and arm the mic-window timer. Runs straight after activation, or after
+     * the spoken "Listening" line has finished when spoken feedback is on.
+     */
+    private fun beginCapture() {
         listenStartedAt = android.os.SystemClock.elapsedRealtime()
         audioPreprocessor.resetVad()
         startCaptureIfNeeded()
         mainHandler.removeCallbacks(sleepRunnable)
         mainHandler.postDelayed(sleepRunnable, listenWindowMs())
     }
+
+    /**
+     * Speak a feedback line (W7). While it plays, [announcing] is true and the
+     * capture callback drops every buffer, so neither Whisper nor the
+     * call-sign detector hears the app's own voice. [then] runs once, when the
+     * line ends, or after [ANNOUNCE_TIMEOUT_MS] if the speech engine never
+     * reports back. A newer line replaces an older one; the older line's
+     * [then] is dropped.
+     */
+    private fun announce(text: String, tagalog: Boolean = speakTagalog(), then: (() -> Unit)? = null) {
+        val token = ++announceToken
+        announcing = true
+        var fired = false
+        val finish = {
+            if (!fired && token == announceToken) {
+                fired = true
+                announcing = false
+                then?.invoke()
+            }
+        }
+        mainHandler.postDelayed({ finish() }, ANNOUNCE_TIMEOUT_MS)
+        announcer.speak(text, tagalog) { finish() }
+    }
+
+    /** Cancel any line being spoken and release the capture gate. */
+    private fun cancelAnnouncement() {
+        announceToken++
+        announcing = false
+        announcer.stop()
+    }
+
+    /**
+     * The line to speak for [key]. Tagalog only when the tester chose Tagalog
+     * and an offline Filipino voice is installed; Tagalog read by an English
+     * voice is hard to follow, so otherwise the English line is used.
+     */
+    private fun say(key: Copy.Key): String =
+        getString(if (speakTagalog()) key.tl else key.en)
+
+    private fun speakTagalog(): Boolean =
+        Copy.lang(this) == Copy.Lang.TL && announcer.speaksFilipino
 
     /**
      * How long the mic stays open when the VAD never decides the utterance
@@ -365,6 +430,9 @@ class OverlayService : Service() {
                     handleUtterance(raw, session)
                 } else {
                     endSessionWithoutResult(session, "blank transcript")
+                    if (UiStyle.speechEnabled(this@OverlayService)) {
+                        announce(say(Copy.Key.SAY_NOT_UNDERSTOOD))
+                    }
                 }
             }
         }
@@ -459,7 +527,9 @@ class OverlayService : Service() {
         if (audioPreprocessor.isCapturing) return
         audioPreprocessor.startCapture(
             callback = { buffer ->
-                if (stateMachine.isKwsListening) {
+                if (announcing) {
+                    Unit
+                } else if (stateMachine.isKwsListening) {
                     handleKwsAudio(buffer)
                 } else if (stateMachine.isListening) {
                     val raw = speechEngine.acceptWaveform(buffer)
@@ -479,7 +549,10 @@ class OverlayService : Service() {
                     }
                 }
             },
-            onSilenceDetected = {
+            onSilenceDetected = silence@{
+                // The app's own voice can trip the silence detector while a
+                // line plays; beginCapture resets it once the line ends.
+                if (announcing) return@silence
                 val listenedMs = android.os.SystemClock.elapsedRealtime() - listenStartedAt
                 if (stateMachine.isListening && listenedMs >= MIN_LISTEN_MS) {
                     mainHandler.post { stopListening("Silence detected (VAD) after ${listenedMs} ms") }
@@ -533,6 +606,7 @@ class OverlayService : Service() {
             runCatching { audioPreprocessor.stopCapture() }
             updateBubble("🎤", 0xFF1E88E5.toInt())
             emitStatus(STATUS_MODEL_ERROR)
+            if (UiStyle.speechEnabled(this@OverlayService)) announce(say(Copy.Key.SAY_ERROR))
             emitError(message)
         }
     }
@@ -921,6 +995,15 @@ class OverlayService : Service() {
 
             val linger = if (warning != null) WARNING_LINGER_MS else RESULT_LINGER_MS
             hideAssistantPopup(linger)
+
+            if (UiStyle.speechEnabled(this)) {
+                when {
+                    // CommandExecutor's result text is English ("Opening YouTube").
+                    ok -> announce(m, tagalog = false)
+                    i == "NO MATCH" -> announce(say(Copy.Key.SAY_NOT_UNDERSTOOD))
+                    else -> announce(say(Copy.Key.SAY_FAILED))
+                }
+            }
         }
         runCatching { startForegroundCompat(buildNotification(warning ?: m)) }
     }
@@ -940,6 +1023,7 @@ class OverlayService : Service() {
         popupShowsResult = popupView != null
         glowView?.state = EdgeGlowView.State.FAILURE
         hideAssistantPopup(RETRY_LINGER_MS)
+        if (UiStyle.speechEnabled(this)) announce(say(Copy.Key.SAY_NOT_UNDERSTOOD))
         runCatching { startForegroundCompat(buildNotification(message)) }
     }
 
@@ -956,6 +1040,7 @@ class OverlayService : Service() {
             ACTION_START -> startListening(explicit = true)
             ACTION_ENSURE_RUNNING -> Unit
             ACTION_STOP_PIPELINE -> {
+                cancelAnnouncement()
                 mainHandler.removeCallbacks(rearmRunnable)
                 CrashLog.info(this, "explicit stop in state ${stateMachine.currentState}")
                 if (stateMachine.isKwsListening) {
@@ -1001,6 +1086,7 @@ class OverlayService : Service() {
         runCatching { audioPreprocessor.release() }
         runCatching { speechEngine.release() }
         runCatching { keywordSpotter.release() }
+        if (::announcer.isInitialized) announcer.release()
         scope.cancel()
         emitStatus(STATUS_IDLE)
         super.onDestroy()
@@ -1084,7 +1170,15 @@ class OverlayService : Service() {
          * The listen timer normally ends it first; this only catches a timer
          * that never ran.
          */
-        const val LISTEN_GRACE_MS = 2000L
+        const val LISTEN_GRACE_MS = 4000L
+
+        /**
+         * Longest wait for a feedback line to report that it finished. After
+         * this the mic opens anyway, so a stuck speech engine cannot leave the
+         * app deaf. The watchdog's listen cap includes [LISTEN_GRACE_MS],
+         * raised from 2 s to 4 s in 1.7.0 to cover the "Listening" line.
+         */
+        private const val ANNOUNCE_TIMEOUT_MS = 3000L
 
         private const val RETRY_LINGER_MS = 2000L
 

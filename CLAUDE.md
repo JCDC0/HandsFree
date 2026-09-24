@@ -534,6 +534,33 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.7.0: W7 spoken feedback, floating button shown when the app opens
+On branch `w3-redesign`.
+- **Spoken feedback (W7)**, `service/Announcer.kt`, through the phone's own
+  text-to-speech engine. Only voices that need no network and are installed
+  are used, so no text leaves the phone. On the TECNO LJ9 the engine offers
+  `fil-ph-x-fic-local` and `en-us-x-tpf-local` (42 offline voices). Lines:
+  "Listening" on activation; the command result on success (CommandExecutor's
+  English text, English voice); "did not catch that" on no match, blank
+  transcript or the 10 s cap; "did not work" on a failed command; "something
+  went wrong" on a model error. Tagalog lines are used when the display
+  language is Tagalog and a Filipino voice is installed; each line is spoken
+  in the voice of its own language.
+- **The mic never hears the app.** Capture opens only after the "Listening"
+  line reports done (`beginCapture()`), and while any line plays the capture
+  callback drops every buffer and the silence detector is ignored
+  (`announcing`). A line that never reports done releases after 3 s
+  (`ANNOUNCE_TIMEOUT_MS`). The watchdog listen grace rose from 2 s to 4 s to
+  cover the line. Device check: activation at 23:13:29.69, listening window
+  opened about 1.1 s later, and the transcript held no trace of the line.
+- "Spoken feedback" switch in Settings, default on. TalkBack hand-off was
+  dropped from W7 by JC's decision.
+- **Floating button at start**: `MainActivity.ensureServiceRunning()` starts
+  the service with `ACTION_ENSURE_RUNNING` on resume once setup is complete,
+  so the button appears when the app opens instead of after the first
+  activation, and the model loads before the first press. It does not open
+  the mic. Device check: button shown at the saved position with no listening.
+
 ### 2026-09-24: 1.6.2: display switches in Settings, standard look by default, floating button switch
 At JC's request, on branch `w3-redesign`.
 - The "Pixel-art style" switch moved from the Debug Screen drawer to

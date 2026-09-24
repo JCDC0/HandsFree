@@ -63,6 +63,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var buildStamp: TextView
     private lateinit var styleSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var bubbleSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var speechSwitch: androidx.appcompat.widget.SwitchCompat
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,6 +99,13 @@ class SettingsActivity : AppCompatActivity() {
         styleSwitch.setOnCheckedChangeListener { _, on ->
             UiStyle.setPixel(this, on)
             CrashLog.info(this, "display style set to ${if (on) "pixel" else "standard"}")
+        }
+
+        speechSwitch = findViewById(R.id.speech_switch)
+        speechSwitch.isChecked = UiStyle.speechEnabled(this)
+        speechSwitch.setOnCheckedChangeListener { _, on ->
+            UiStyle.setSpeechEnabled(this, on)
+            CrashLog.info(this, "spoken feedback ${if (on) "on" else "off"}")
         }
 
         bubbleSwitch = findViewById(R.id.bubble_switch)
@@ -141,6 +149,8 @@ class SettingsActivity : AppCompatActivity() {
         styleSwitch.contentDescription = styleSwitch.text
         bubbleSwitch.text = Copy.get(this, Copy.Key.BUBBLE_SWITCH)
         bubbleSwitch.contentDescription = bubbleSwitch.text
+        speechSwitch.text = Copy.get(this, Copy.Key.SPEECH_SWITCH)
+        speechSwitch.contentDescription = speechSwitch.text
 
         updateLanguageButton()
         renderListenWindow()

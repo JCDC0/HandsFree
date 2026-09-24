@@ -182,6 +182,19 @@
         <!-- Display switches (1.6.2). Labels set from Kotlin, like every other
              control on this screen. -->
         <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/speech_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text=""
+            android:textSize="14sp"
+            android:background="@color/hf_button_neutral_bg"
+            android:textColor="@color/hf_button_neutral_text"
+            android:layout_marginBottom="10dp" />
+
+        <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/bubble_switch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

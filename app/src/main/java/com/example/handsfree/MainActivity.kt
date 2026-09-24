@@ -522,6 +522,28 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         applyUiStyle()
         applyLanguage()
         advanceOnboarding()
+        ensureServiceRunning()
+    }
+
+    /**
+     * Start the overlay service, without listening, once setup is complete.
+     *
+     * Before 1.6.3 the service started only on the first activation, so the
+     * floating mic button (shown when the model is ready) appeared only after
+     * the tester had already pressed Start. Starting it here puts the button on
+     * screen when the app opens, and loads the model early so the first press
+     * does not wait for it. Nothing reaches the microphone: ENSURE_RUNNING
+     * does not open a listening session, and call-sign listening still needs
+     * its own switch.
+     */
+    private fun ensureServiceRunning() {
+        if (OverlayService.running) return
+        if (!consented() || !hasRecordAudioPermission() || missingSetup().isNotEmpty()) return
+        val intent = Intent(this, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_ENSURE_RUNNING
+        }
+        runCatching { startForegroundService(intent) }
+            .onFailure { CrashLog.exception(this, "ensureServiceRunning", it) }
     }
 
     /**
