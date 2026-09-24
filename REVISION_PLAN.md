@@ -24,13 +24,23 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | ID | State | Evidence |
 |---|---|---|
 | W1 | Code done in `41e66c7` (1.5.3). Unit tests green. **Device tests pending.** | `AppStateMachineTest`, build stamp `41e66c7` |
-| W2 | Not started. `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
+| W2 | Not started. Panel item 12: "make it understand i-click or remove the hyphen". `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
 | W3 | Not started. Needed before the app expert receives the APK. | |
 | W4 | Parked. Not on the panel form. | |
-| W5 | In progress with Karl, off-repo. No model delivered as of 2026-09-24. Inputs in Drive `Dataset/KWS Training Inputs (Sept 21)`. | |
+| W5 | **Cancelled 2026-09-24.** Karl's training setup kept breaking and he decided to keep Hey Jarvis. Not a panel item. | Karl, relayed by JC |
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (later), Cowork-Claude.**
+- W5 cancelled. Karl reports the wake-word training breaks on his system and has
+  decided to keep Hey Jarvis. The panel form has no wake-word item, so no
+  revision is left open. Hey Jarvis still gives a blind participant voice
+  activation. `CLAUDE.md` section 9 and `DEV_GUIDE.md` 6b updated to match.
+- JC supplied a clean transcription of the panel form. Item 12 reads "make it
+  understand i-click or remove the hyphen", which confirms W2's scope.
+- Harold's combined dataset-and-model email re-checked against the sources and
+  confirmed correct before sending.
 
 **2026-09-24, Cowork-Claude.** Reorientation audit before the W1 device tests.
 - Repo clean, HEAD `41e66c7` pushed, no AI attribution in the commit. The APK on

@@ -454,10 +454,11 @@ Three `KWS fired` events, each handing off to Whisper correctly; two went on to
 execute an APP_LAUNCH end to end ("Opening HandsFree", "Opening Duolingo").
 
 **The keyword is "Hey Jarvis", not "Hey HandsFree".** The bundled model is
-openWakeWord's pretrained `hey_jarvis_v0.1.onnx`. Training a custom call sign is **in
-progress** (Karl, from 2026-09-21), promoted because a blind user cannot reach a
-volume key or the bubble. Contract and constants: `REVISION_PLAN.md` W5 and
-`DEV_GUIDE.md` 6b.
+openWakeWord's pretrained `hey_jarvis_v0.1.onnx`. Training a custom call sign was
+attempted and **cancelled on 2026-09-24**: Karl's training setup kept breaking and
+the team decided to keep Hey Jarvis. It was never a panel requirement. Hey Jarvis
+still gives a blind user voice activation, and the manuscript discloses the
+borrowed name on page 61.
 
 **Still off by default** (`PREF_WAKE_WORD` = false). Always-on listening keeps
 the microphone open and runs three ONNX models on every 80 ms of audio; that is

@@ -465,11 +465,11 @@ and the next speaker will produce a tenth.
 
 ## 6b. Training a real "Hey HandsFree" — future work, NOT before Aug 28
 
-> **Status 2026-09-24: in progress.** Promoted after the defense because a blind
-> participant cannot use the volume key or the bubble. Karl is training off-repo
-> against the bundled `melspectrogram.onnx` and `embedding_model.onnx`, target
-> signature `[1, 16, 96]` in and `[1, 1]` sigmoid out. The warning below is kept
-> as history.
+> **Status 2026-09-24: cancelled.** Attempted after the defense, then dropped:
+> Karl's training setup kept breaking and the team decided to keep Hey Jarvis.
+> It was never a panel requirement. If someone revives this, the contract was
+> the bundled `melspectrogram.onnx` and `embedding_model.onnx` for features,
+> `[1, 16, 96]` in and `[1, 1]` sigmoid out. The warning below is kept as history.
 
 > [!WARNING]
 > **Do not start this before the manuscript is submitted.** The call sign works
