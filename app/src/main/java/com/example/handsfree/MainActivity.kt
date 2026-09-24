@@ -351,18 +351,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             }
         })
 
-        styleSwitch = findViewById(R.id.style_switch)
-        styleSwitch.isChecked = UiStyle.isPixel(this)
-        styleSwitch.setOnCheckedChangeListener { _, on ->
-            UiStyle.setPixel(this, on)
-            CrashLog.info(this, "display style set to ${if (on) "pixel" else "standard"}")
-            applyUiStyle()
-        }
-
         applyUiStyle()
     }
-
-    private lateinit var styleSwitch: androidx.appcompat.widget.SwitchCompat
 
     /** The style the screen was last painted in, so onResume repaints only on a change. */
     private var appliedPixelStyle: Boolean? = null
@@ -370,7 +360,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     /**
      * Paint the screen in the chosen style ([UiStyle]): pixel-art frames,
      * icons and fonts, or plain shapes, the original icons and the phone's
-     * font. Called from onCreate, from the drawer switch, and from onResume.
+     * font. Called from onCreate and from onResume, since the switch is on
+     * the settings screen.
      */
     private fun applyUiStyle() {
         val pixel = UiStyle.isPixel(this)
@@ -407,7 +398,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         ).forEach { findViewById<TextView>(it).typeface = label }
         listOf(
             R.id.subtitle_text, R.id.start_caption, R.id.wake_word_caption,
-            R.id.status_text, R.id.intent_text, R.id.style_switch
+            R.id.status_text, R.id.intent_text
         ).forEach { findViewById<TextView>(it).typeface = body }
         findViewById<TextView>(R.id.app_title).letterSpacing = if (pixel) 0f else 0.02f
 
@@ -661,7 +652,6 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         settingsButton.contentDescription = Copy.get(this, Copy.Key.OPEN_SETTINGS)
         debugTitle.text = Copy.get(this, Copy.Key.DEBUG_TITLE)
         debugButton.contentDescription = Copy.get(this, Copy.Key.DEBUG_OPEN)
-        styleSwitch.text = Copy.get(this, Copy.Key.STYLE_SWITCH)
 
         setStartButtonState(running = pipelineActive)
         updateWakeWordButton()

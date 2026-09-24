@@ -8,8 +8,8 @@ import androidx.core.content.res.ResourcesCompat
 import com.example.handsfree.R
 
 /**
- * The visual style switch in the Debug Screen drawer, added in 1.6.1 at
- * JC's request.
+ * The visual style switch in Settings, added in 1.6.1 at JC's request. The
+ * team preferred the standard look, so pixel style is off by default (1.6.2).
  *
  * Pixel style (the W3 look): pixel-art circles and frames, pixel icons, and
  * the Silkscreen and Pixelify Sans fonts. Standard style: plain round
@@ -18,14 +18,29 @@ import com.example.handsfree.R
  * same in both.
  *
  * Stored in `handsfree_prefs` so the main screen, the settings screen and
- * the overlay service all read one value. Default: pixel style on.
+ * the overlay service all read one value. Default: standard style.
+ *
+ * Also holds the floating mic button switch ([bubbleEnabled]), the other
+ * display option on the settings screen. Default: shown.
  */
 object UiStyle {
     private const val PREFS = "handsfree_prefs"
     const val PREF_PIXEL = "pixel_style"
 
+    const val PREF_BUBBLE = "bubble_enabled"
+    const val PREF_BUBBLE_X = "bubble_x"
+    const val PREF_BUBBLE_Y = "bubble_y"
+
     fun isPixel(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_PIXEL, true)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_PIXEL, false)
+
+    fun bubbleEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_BUBBLE, true)
+
+    fun setBubbleEnabled(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(PREF_BUBBLE, on).apply()
+    }
 
     fun setPixel(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()

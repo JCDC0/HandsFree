@@ -83,6 +83,7 @@ object Copy {
         DEBUG_TITLE(R.string.ui_debug_title_tl, R.string.ui_debug_title_en),
         DEBUG_OPEN(R.string.ui_debug_open_tl, R.string.ui_debug_open_en),
         STYLE_SWITCH(R.string.ui_style_switch_tl, R.string.ui_style_switch_en),
+        BUBBLE_SWITCH(R.string.ui_bubble_switch_tl, R.string.ui_bubble_switch_en),
         DLG_CLEAR(R.string.ui_dlg_clear_tl, R.string.ui_dlg_clear_en),
         CLEAR_TITLE(R.string.ui_clear_title_tl, R.string.ui_clear_title_en),
         CLEAR_BODY(R.string.ui_clear_body_tl, R.string.ui_clear_body_en),

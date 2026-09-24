@@ -20,6 +20,7 @@ import com.example.handsfree.util.CrashLog
 import com.example.handsfree.util.applySystemBarInsets
 import com.example.handsfree.util.hasAnswerCallPermission
 import com.example.handsfree.util.isAccessibilityServiceEnabled
+import com.example.handsfree.util.UiStyle
 import com.example.handsfree.util.scrollingDialog
 import com.example.handsfree.util.themed
 import java.io.File
@@ -60,6 +61,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var howToButton: Button
     private lateinit var languageButton: Button
     private lateinit var buildStamp: TextView
+    private lateinit var styleSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var bubbleSwitch: androidx.appcompat.widget.SwitchCompat
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,6 +93,28 @@ class SettingsActivity : AppCompatActivity() {
         howToButton.setOnClickListener { showHowTo() }
         languageButton.setOnClickListener { toggleLanguage() }
 
+        styleSwitch = findViewById(R.id.style_switch)
+        styleSwitch.isChecked = UiStyle.isPixel(this)
+        styleSwitch.setOnCheckedChangeListener { _, on ->
+            UiStyle.setPixel(this, on)
+            CrashLog.info(this, "display style set to ${if (on) "pixel" else "standard"}")
+        }
+
+        bubbleSwitch = findViewById(R.id.bubble_switch)
+        bubbleSwitch.isChecked = UiStyle.bubbleEnabled(this)
+        bubbleSwitch.setOnCheckedChangeListener { _, on ->
+            UiStyle.setBubbleEnabled(this, on)
+            CrashLog.info(this, "floating mic button ${if (on) "on" else "off"}")
+            // Tell a running service to show or hide the button now. If the
+            // service is not running, it reads the setting when it starts;
+            // starting it here would load the speech model for nothing.
+            if (OverlayService.running) {
+                startService(Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_SET_BUBBLE
+                })
+            }
+        }
+
         setUpListenWindow()
         applyLanguage()
     }
@@ -112,6 +137,10 @@ class SettingsActivity : AppCompatActivity() {
         showHistoryButton.text = Copy.get(this, Copy.Key.BTN_HISTORY)
         showLogButton.text = Copy.get(this, Copy.Key.BTN_SYSLOG)
         howToButton.text = Copy.get(this, Copy.Key.BTN_HOWTO)
+        styleSwitch.text = Copy.get(this, Copy.Key.STYLE_SWITCH)
+        styleSwitch.contentDescription = styleSwitch.text
+        bubbleSwitch.text = Copy.get(this, Copy.Key.BUBBLE_SWITCH)
+        bubbleSwitch.contentDescription = bubbleSwitch.text
 
         updateLanguageButton()
         renderListenWindow()

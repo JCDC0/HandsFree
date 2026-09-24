@@ -158,6 +158,7 @@ class OverlayService : Service() {
         super.onCreate()
         Log.i(TAG, "onCreate")
         CrashLog.rotate(this, BuildConfig.BUILD_STAMP)
+        running = true
         CrashLog.step(this, "STEP_0: OverlayService.onCreate")
         wakeWordEnabled = getSharedPreferences(PREFS, MODE_PRIVATE)
             .getBoolean(PREF_WAKE_WORD, false)
@@ -624,6 +625,10 @@ class OverlayService : Service() {
      */
     private fun showBubble() {
         if (bubbleView != null) return
+        if (!UiStyle.bubbleEnabled(this)) {
+            Log.i(TAG, "floating mic button turned off in Settings")
+            return
+        }
         if (!Settings.canDrawOverlays(this)) {
             Log.w(TAG, "overlay permission missing: bubble unavailable")
             return
@@ -651,8 +656,9 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 24
-            y = 320
+            val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+            x = prefs.getInt(UiStyle.PREF_BUBBLE_X, 24)
+            y = prefs.getInt(UiStyle.PREF_BUBBLE_Y, 320)
         }
 
         var downX = 0f
@@ -682,6 +688,13 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_UP -> {
                     if (!dragged) {
                         startListening(explicit = true)
+                    } else {
+                        // Remember where the tester left it, so it comes back
+                        // there after a restart instead of the top left.
+                        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                            .putInt(UiStyle.PREF_BUBBLE_X, params.x)
+                            .putInt(UiStyle.PREF_BUBBLE_Y, params.y)
+                            .apply()
                     }
                     true
                 }
@@ -959,6 +972,12 @@ class OverlayService : Service() {
                     scheduleRearm()
                 }
             }
+            ACTION_SET_BUBBLE ->
+                if (UiStyle.bubbleEnabled(this)) {
+                    if (speechEngine.isReady) showBubble()
+                } else {
+                    hideBubble()
+                }
             ACTION_SET_WAKE_WORD ->
                 setWakeWordEnabled(intent.getBooleanExtra(EXTRA_ENABLED, false))
         }
@@ -967,6 +986,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
+        running = false
         CrashLog.stopped(this)
         if (::watchdog.isInitialized) {
             watchdog.release()
@@ -1123,6 +1143,17 @@ class OverlayService : Service() {
         const val ACTION_ACTIVATE = "com.example.handsfree.ACTIVATE"
         /** Turn always-on call-sign listening on or off. Carries [EXTRA_ENABLED]. */
         const val ACTION_SET_WAKE_WORD = "com.example.handsfree.SET_WAKE_WORD"
+        /** Show or hide the floating mic button to match the Settings switch. */
+        const val ACTION_SET_BUBBLE = "com.example.handsfree.SET_BUBBLE"
+
+        /**
+         * True between onCreate and onDestroy. Settings checks it before
+         * sending [ACTION_SET_BUBBLE], so flipping the switch never starts the
+         * service and loads the model just to hide a button.
+         */
+        @Volatile
+        var running = false
+            private set
         /** Start the service without beginning a listening session. */
         const val ACTION_ENSURE_RUNNING = "com.example.handsfree.ENSURE_RUNNING"
         const val EXTRA_ENABLED = "enabled"

@@ -534,6 +534,20 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.6.2: display switches in Settings, standard look by default, floating button switch
+At JC's request, on branch `w3-redesign`.
+- The "Pixel-art style" switch moved from the Debug Screen drawer to
+  Settings, under the language button. The team preferred the standard look,
+  so the default is now off (`UiStyle.isPixel` defaults to false).
+- New "Floating mic button" switch in Settings, default on. Off hides the
+  button at once if the service is running (`ACTION_SET_BUBBLE`); otherwise
+  the service reads it when it starts. `OverlayService.running` stops the
+  switch from starting the service just to hide a button.
+- The floating button remembers where it was dragged (`bubble_x`,
+  `bubble_y` in `handsfree_prefs`) and returns there after a restart.
+- Not checked on the device: JC was using the phone after the install, so
+  no taps were sent. Build passes.
+
 ### 2026-09-24: 1.6.1: style switch in the Debug Screen, activator icons centred
 At JC's request, on branch `w3-redesign`.
 - **"Pixel-art style" switch** at the top of the Debug Screen drawer (in the

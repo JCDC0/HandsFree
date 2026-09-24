@@ -205,20 +205,7 @@
                     android:textSize="20sp"
                     android:fontFamily="@font/silkscreen"
                     android:textColor="@color/hf_text_primary"
-                    android:layout_marginBottom="12dp" />
-
-                <!-- 1.6.1: pixel-art style or the phone's standard look, at
-                     JC's request. In the drawer rather than Settings because
-                     it is quicker to reach here. Applies at once. -->
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/style_switch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text=""
-                    android:textSize="15sp"
-                    android:textColor="@color/hf_text_primary"
-                    android:layout_marginBottom="12dp" />
+                    android:layout_marginBottom="16dp" />
 
                 <!-- Warning banner: hidden unless a command ran into something
                      outside the app's control, today only a web search with no
