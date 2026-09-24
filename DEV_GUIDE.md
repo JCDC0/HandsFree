@@ -275,6 +275,15 @@ something is broken when it is not.
 > proven, days before submission, to add a second convenience is the wrong trade.
 > Recorded here so it is not lost.
 
+> [!NOTE]
+> **Known limitation of the pipeline watchdog (1.5.3).** `PipelineWatchdog` resets
+> the state machine to IDLE if a command stalls past the listen window plus
+> `WATCHDOG_INFERENCE_ALLOWANCE_MS`. It recovers the state, not the work: a native
+> ONNX inference call that has wedged cannot be killed from Kotlin, so after a
+> watchdog reset a new command can start while the old inference thread is still
+> unwinding. Rare, and better than the app going permanently deaf. If you see one
+> doubled result right after a long hang, this is the cause.
+
 Ordered. Anything below the line is post-demo.
 
 | # | Task | Where | Notes |
@@ -290,7 +299,7 @@ Ordered. Anything below the line is post-demo.
 | 6 | MESSAGING execution | `CommandExecutor.execute()` | Classifies correctly, does nothing. Multi-step and stateful — **not before the demo** |
 | 7 | Tie-breaking / confidence in the matcher | `LevenshteinMatcher` | Real fix for rules 2–4 above. Frozen until after the demo |
 | 8 | Grid Overlay (manuscript calls it co-equal to DFS) | not started | Thesis scope, not demo scope |
-| 9 | Wire `AppStateMachine` for multi-turn context | `AppStateMachine.kt` | Dead code today |
+| 9 | ~~Wire `AppStateMachine`~~ | `AppStateMachine.kt` | **Done in 1.5.3 (`41e66c7`)** as the single source of pipeline state. Multi-turn context is still not built |
 
 **Do not add a fourth feature.** Scope is APP_LAUNCH, CALL_ACCEPT, NAVIGATION
 (`CLAUDE.md` §2).
@@ -324,7 +333,8 @@ Keep it behind a flag so it can be switched off in the demo build if it misfires
 
 ## 6a. Morphological normalisation — the post-demo structural fix
 
-**Status: specified, not built. Do not build this before the Aug 13 demo.**
+**Status: specified, not built. Scheduled as `REVISION_PLAN.md` W2 Part B
+(2026-09-24). Implement this spec rather than writing a new one.**
 
 ### The problem, with numbers
 
@@ -454,6 +464,12 @@ and the next speaker will produce a tenth.
 ---
 
 ## 6b. Training a real "Hey HandsFree" — future work, NOT before Aug 28
+
+> **Status 2026-09-24: in progress.** Promoted after the defense because a blind
+> participant cannot use the volume key or the bubble. Karl is training off-repo
+> against the bundled `melspectrogram.onnx` and `embedding_model.onnx`, target
+> signature `[1, 16, 96]` in and `[1, 1]` sigmoid out. The warning below is kept
+> as history.
 
 > [!WARNING]
 > **Do not start this before the manuscript is submitted.** The call sign works

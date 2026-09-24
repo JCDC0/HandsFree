@@ -9,6 +9,52 @@ touching either JSON asset. The rules there still hold. In particular: the code
 is the source of truth over any Markdown, prefer a lexicon entry over a code
 change, and run `./gradlew assembleDebug` before handing anything back.
 
+## Ledger
+
+**Read this first, every session.** Check the Status table and the newest Log
+entry before acting. Before stating anything about the code or the records, open
+the file. Do not rely on an earlier summary, including this one. After acting, add
+a Log entry: what changed, how it was verified, and what was not verified.
+
+App and repo state is recorded here and in `CLAUDE.md` section 9. Research and team
+state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
+
+### Status
+
+| ID | State | Evidence |
+|---|---|---|
+| W1 | Code done in `41e66c7` (1.5.3). Unit tests green. **Device tests pending.** | `AppStateMachineTest`, build stamp `41e66c7` |
+| W2 | Not started. `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
+| W3 | Not started. Needed before the app expert receives the APK. | |
+| W4 | Parked. Not on the panel form. | |
+| W5 | In progress with Karl, off-repo. No model delivered as of 2026-09-24. Inputs in Drive `Dataset/KWS Training Inputs (Sept 21)`. | |
+| W6 | Continues with each workstream. | |
+
+### Log
+
+**2026-09-24, Cowork-Claude.** Reorientation audit before the W1 device tests.
+- Repo clean, HEAD `41e66c7` pushed, no AI attribution in the commit. The APK on
+  disk was built after the commit, stamp `41e66c7`.
+- The phone was running 1.5.2 (versionCode 8), installed six minutes before the
+  1.5.3 build. Upgraded in place with `adb install -r`. It now reports 1.5.3-tester,
+  versionCode 9, accessibility service still enabled, no data wiped.
+- My error, corrected: I had called the 37.8M parameter figure in `CLAUDE.md` wrong.
+  The HuggingFace API reports 37,760,640 and the exporter 37,184,640. The gap,
+  576,000 = 1500 x 384, is the encoder positional embedding. Both are correct.
+- My error, corrected: my W1 test card put the call sign toggle in settings. It is
+  `wake_word_button`, the second round button on the main screen.
+- Gap found: W2 Part B was written without reading `DEV_GUIDE.md` 6a, which already
+  specifies morphological normalisation. W2 now points to it.
+- Stale docs fixed in `CLAUDE.md` section 9 and `DEV_GUIDE.md` sections 6, 6a, 6b.
+  Watchdog native-thread limitation recorded in `DEV_GUIDE.md` section 6.
+- Research-side corrections (speaker overlap, expert emails) are in
+  `PROJECT_STATE.md` section 37.
+
+**2026-09-21, Antigravity.** W1 implemented in two review rounds. See the 1.5.3
+entry in the `CLAUDE.md` CHANGELOG.
+
+**2026-09-21, Cowork-Claude.** This plan written.
+
 ## Order of work, and why
 
 W1 comes first because the concurrency bugs corrupt the testing of everything
@@ -131,7 +177,10 @@ variants: `iklik`, `itap`, `ipindot`, `ipindutin`, `ipindutan`, `iscroll`,
 `iskrol pababa`, `iskrol pataas`. Follow `DEV_GUIDE.md` section 4. This alone
 fixes the observed failures and is the change that should ship first.
 
-Part B, the general rule. Add a guarded prefix-stripping step in
+Part B, the general rule. **Implement the existing spec in `DEV_GUIDE.md` 6a**
+(morphological normalisation), which predates this plan and was not read when this
+section was first written. The guard below is a minimum requirement on top of that
+spec, not a replacement. Add a guarded prefix-stripping step in
 `TranslationLayer.kt`. This is a handle-with-care file, so keep the change
 small and place it after the existing lexicon lookup, not before it.
 
@@ -321,9 +370,10 @@ in the same commit.
 - `CLAUDE.md` section 9: rewrite the current-state block after each workstream.
   Note that 1.5.2 has now been compiled and run on a device, since section 9
   still warns that it has not.
-- `CLAUDE.md` section 5 carries a wrong figure. It states the model is 37.8M
-  parameters. The exporter prints **37,184,640**, being 7,632,384 encoder plus
-  29,552,256 decoder. Correct it.
+- `CLAUDE.md` section 5 gives the parameter count. Keep both figures and the
+  reason they differ: HuggingFace 37,760,640, exporter 37,184,640, the 576,000
+  gap being the encoder positional embedding. An earlier version of this plan
+  called 37.8M wrong. It is not.
 - `DEV_GUIDE.md` section 4: add the `i-` prefix rule and its guard list.
 - `CHANGELOG`: one entry per workstream, version-prefixed.
 - Bump `versionName` and `versionCode` once per shipped build, and rebuild after

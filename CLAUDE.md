@@ -196,7 +196,11 @@ manuscript, Drive, and team coordination). Prompts may be relayed between them.
 
 Karl's fine-tuned model, running on device since 2026-08-12.
 **https://huggingface.co/KarlShane11/handsfree-whisper-tiny-tl**
-37.8M params, whisper-tiny fine-tuned on Filipino/Tagalog.
+37,760,640 parameters as stored on HuggingFace (shown there as 37.8M). The ONNX
+exporter reports 37,184,640 for the same model: OpenAI's format keeps the
+encoder's sinusoidal positional embedding (1500 x 384 = 576,000 values) as a
+buffer, not a parameter. Both figures are correct. Whisper-tiny fine-tuned on
+Filipino/Tagalog.
 Baseline WER 82.72% -> 63.15% fine-tuned, 1,479-example held-out test set.
 
 `encoder.onnx`, `decoder.onnx` and `tokens.txt` live in
@@ -346,16 +350,14 @@ Do not attempt Messaging or Scheduling live, even if they appear to work.
 
 ## 9. Current state — update this section
 
-**Last verified:** 2026-08-12 evening PHT, `./gradlew assembleDebug` and
-`installDebug` green on device 144512558D105352 (includes Whisper ONNX models).
+**Last verified:** 2026-09-24. `1.5.3-tester` (versionCode 9, stamp `41e66c7`)
+compiled, `testDebugUnitTest` green, installed on device 144512558D105352 with the
+accessibility service enabled. **W1 device tests pending.** Progress is tracked in
+`REVISION_PLAN.md`, section Ledger.
 
-**1.5.2 (the debug-screen redesign) has not been compiled.** It was written in
-a sandbox with no Android SDK and with `dl.google.com` blocked by the egress
-policy, so AGP could not be downloaded and Gradle never reached the app. Every
-resource reference was checked by script instead (see the CHANGELOG entry).
-**Run `./gradlew assembleDebug` before this reaches a tester**, and expect the
-first failure, if there is one, to be a Kotlin type error rather than a
-missing resource.
+**1.5.2 has since been compiled and run.** Built 2026-09-16 and checked on device
+by JC before the defense. The earlier warning that it had never been compiled is
+retired.
 
 **Speech pipeline is running on hardware.** Whisper transcribes; the failures
 now come from the lexicon and the executor, not the model. Two structural
@@ -452,9 +454,10 @@ Three `KWS fired` events, each handing off to Whisper correctly; two went on to
 execute an APP_LAUNCH end to end ("Opening HandsFree", "Opening Duolingo").
 
 **The keyword is "Hey Jarvis", not "Hey HandsFree".** The bundled model is
-openWakeWord's pretrained `hey_jarvis_v0.1.onnx`. Training a custom call sign is
-future work and is written up in `DEV_GUIDE.md` — **do not attempt it before the
-Aug 28 submission.**
+openWakeWord's pretrained `hey_jarvis_v0.1.onnx`. Training a custom call sign is **in
+progress** (Karl, from 2026-09-21), promoted because a blind user cannot reach a
+volume key or the bubble. Contract and constants: `REVISION_PLAN.md` W5 and
+`DEV_GUIDE.md` 6b.
 
 **Still off by default** (`PREF_WAKE_WORD` = false). Always-on listening keeps
 the microphone open and runs three ONNX models on every 80 ms of audio; that is
@@ -512,6 +515,17 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-09-24: docs only. Reorientation audit and corrections
+- Section 5: the parameter count now gives both figures and why they differ
+  (HuggingFace 37,760,640; ONNX exporter 37,184,640; the 576,000 gap is the
+  encoder positional embedding). Neither was wrong.
+- Section 9: last-verified line updated for 1.5.3; the "1.5.2 has not been
+  compiled" warning retired; wake-word training marked in progress.
+- `DEV_GUIDE.md`: watchdog limitation recorded; section 6 row 9, 6a and 6b
+  status lines updated.
+- `REVISION_PLAN.md`: Ledger added. App-side progress is recorded there from now on.
+- No code change. Phone upgraded to 1.5.3 in place.
 
 ### 2026-09-21: 1.5.3: wire the state machine and add a pipeline watchdog to stop double activations
 Workstream W1. Addresses activation and popup race conditions where check-then-act on @Volatile booleans allowed duplicate activations and orphaned inference runs.
