@@ -534,6 +534,24 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.5.8: export and clear move into the log dialog
+At JC's request.
+- The "Export log for Google Form" button is removed from Settings. The
+  Transcribed, Translated & Intent Log dialog now has two rows of buttons under
+  the list: Copy to Clipboard and Close (red), then Export and Clear. Export
+  runs the same privacy screen and share sheet as before. Clear asks first,
+  then empties the history and deletes `transcript.log`.
+- Fixed: the log dialog and Export read only the in-memory list, which is
+  filled in `OverlayService.onCreate`. After an app update the settings screen
+  can open before the service starts, and the dialog read "No history recorded
+  yet" over a 7 KB history file. New `OverlayService.ensureHistoryLoaded()`
+  reads the file when the list is empty.
+- How-to and export privacy text no longer mention the Google Form.
+- Lexicon: `klick` to `click`, from the 1.5.7 log.
+- Checked on the device over adb: the dialog shows the history with the four
+  buttons, Export opens the privacy screen, Close dismisses. Clear was not
+  pressed, to keep JC's test history.
+
 ### 2026-09-24: 1.5.7: spelling-tolerant taps, and lexicon entries from the 1.5.6 device log
 From JC's 1.5.6 log: intents resolved but taps missed on near-spellings
 ("click setings", "click kalindor"), and several mishearings reached no

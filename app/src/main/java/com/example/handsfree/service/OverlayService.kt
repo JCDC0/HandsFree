@@ -1003,5 +1003,24 @@ class OverlayService : Service() {
         var pipelineListener: PipelineListener? = null
 
         val transcriptHistory = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+        /**
+         * Fill [transcriptHistory] from disk if it is empty. The settings
+         * screen calls this because the list is otherwise filled only in
+         * [onCreate], and after an app update or a process restart the
+         * settings screen can open before the service has started. Seen
+         * 2026-09-24: the log dialog read "No history recorded yet" over a
+         * 7 KB history file.
+         */
+        fun ensureHistoryLoaded(context: android.content.Context) {
+            if (transcriptHistory.isNotEmpty()) return
+            runCatching {
+                val file = java.io.File(context.filesDir, "transcript.log")
+                if (!file.exists()) return
+                val content = file.readText()
+                if (content.isBlank()) return
+                transcriptHistory.addAll(content.split("|||").take(HISTORY_LIMIT))
+            }.onFailure { Log.e(TAG, "Failed to load transcript history", it) }
+        }
     }
 }

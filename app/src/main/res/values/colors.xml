@@ -30,6 +30,8 @@
     <color name="hf_button_neutral_text">#333333</color>
     <color name="hf_button_accent_bg">#E3F2FD</color>
     <color name="hf_button_accent_text">#1565C0</color>
+    <color name="hf_button_danger_bg">#D32F2F</color>
+    <color name="hf_button_danger_text">#FFFFFF</color>
 
     <!-- Call-sign toggle when on -->
     <color name="hf_toggle_on_bg">#C8E6C9</color>

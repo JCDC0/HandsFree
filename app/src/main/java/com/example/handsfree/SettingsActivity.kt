@@ -21,6 +21,7 @@ import com.example.handsfree.util.applySystemBarInsets
 import com.example.handsfree.util.hasAnswerCallPermission
 import com.example.handsfree.util.isAccessibilityServiceEnabled
 import com.example.handsfree.util.scrollingDialog
+import com.example.handsfree.util.themed
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -56,7 +57,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var permButton: Button
     private lateinit var showHistoryButton: Button
     private lateinit var showLogButton: Button
-    private lateinit var exportLogButton: Button
     private lateinit var howToButton: Button
     private lateinit var languageButton: Button
     private lateinit var buildStamp: TextView
@@ -79,7 +79,6 @@ class SettingsActivity : AppCompatActivity() {
         permButton = findViewById(R.id.perm_button)
         showHistoryButton = findViewById(R.id.show_history_button)
         showLogButton = findViewById(R.id.show_log_button)
-        exportLogButton = findViewById(R.id.export_log_button)
         howToButton = findViewById(R.id.how_to_button)
         languageButton = findViewById(R.id.language_button)
         buildStamp = findViewById(R.id.build_stamp)
@@ -88,7 +87,6 @@ class SettingsActivity : AppCompatActivity() {
         permButton.setOnClickListener { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         showHistoryButton.setOnClickListener { showHistory() }
         showLogButton.setOnClickListener { showSystemLog() }
-        exportLogButton.setOnClickListener { confirmExport() }
         howToButton.setOnClickListener { showHowTo() }
         languageButton.setOnClickListener { toggleLanguage() }
 
@@ -113,7 +111,6 @@ class SettingsActivity : AppCompatActivity() {
         permButton.text = Copy.get(this, Copy.Key.BTN_ACCESSIBILITY)
         showHistoryButton.text = Copy.get(this, Copy.Key.BTN_HISTORY)
         showLogButton.text = Copy.get(this, Copy.Key.BTN_SYSLOG)
-        exportLogButton.text = Copy.get(this, Copy.Key.BTN_EXPORT)
         howToButton.text = Copy.get(this, Copy.Key.BTN_HOWTO)
 
         updateLanguageButton()
@@ -194,16 +191,95 @@ class SettingsActivity : AppCompatActivity() {
     // ---- logs ----
 
     private fun showHistory() {
+        OverlayService.ensureHistoryLoaded(this)
         val history = if (OverlayService.transcriptHistory.isEmpty()) {
             Copy.get(this, Copy.Key.HISTORY_EMPTY)
         } else {
             OverlayService.transcriptHistory.joinToString("\n\n---\n\n")
         }
-        showTextDialog(
-            "${Copy.get(this, Copy.Key.DLG_HISTORY)} (${OverlayService.HISTORY_LIMIT})",
-            history,
-            clipLabel = "HandsFree Transcript History"
-        )
+        val body = TextView(this).apply {
+            text = history
+            setPadding(48, 32, 48, 32)
+            setTextIsSelectable(true)
+            setTextColor(themed(R.color.hf_text_body))
+        }
+        val scroll = android.widget.ScrollView(this).apply {
+            addView(body)
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+        }
+
+        lateinit var dialog: AlertDialog
+        fun dialogButton(key: Copy.Key, bg: Int, fg: Int, onTap: () -> Unit) =
+            Button(this).apply {
+                text = Copy.get(this@SettingsActivity, key)
+                contentDescription = text
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(themed(bg))
+                setTextColor(themed(fg))
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                ).apply { setMargins(8, 4, 8, 4) }
+                setOnClickListener { onTap() }
+            }
+        fun row(vararg buttons: Button) = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            setPadding(32, 0, 32, 0)
+            buttons.forEach { addView(it) }
+        }
+
+        val copyButton = dialogButton(Copy.Key.DLG_COPY, R.color.hf_button_neutral_bg, R.color.hf_button_neutral_text) {
+            getSystemService(ClipboardManager::class.java)
+                ?.setPrimaryClip(ClipData.newPlainText("HandsFree Transcript History", history))
+            Toast.makeText(this, Copy.get(this, Copy.Key.COPIED), Toast.LENGTH_SHORT).show()
+        }
+        val closeButton = dialogButton(Copy.Key.DLG_CLOSE, R.color.hf_button_danger_bg, R.color.hf_button_danger_text) {
+            dialog.dismiss()
+        }
+        val exportButton = dialogButton(Copy.Key.DLG_EXPORT, R.color.hf_button_accent_bg, R.color.hf_button_accent_text) {
+            confirmExport()
+        }
+        val clearButton = dialogButton(Copy.Key.DLG_CLEAR, R.color.hf_button_neutral_bg, R.color.hf_button_neutral_text) {
+            confirmClear { dialog.dismiss() }
+        }
+
+        val content = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 24)
+            addView(scroll)
+            addView(row(copyButton, closeButton))
+            addView(row(exportButton, clearButton))
+        }
+
+        dialog = AlertDialog.Builder(this)
+            .setTitle("${Copy.get(this, Copy.Key.DLG_HISTORY)} (${OverlayService.HISTORY_LIMIT})")
+            .setView(content)
+            .create()
+        dialog.show()
+    }
+
+    /**
+     * Ask before wiping the command history. The history is the tester's
+     * evidence, so the confirm names what is lost and that export comes first.
+     */
+    private fun confirmClear(onCleared: () -> Unit) {
+        if (OverlayService.transcriptHistory.isEmpty()) {
+            Toast.makeText(this, Copy.get(this, Copy.Key.HISTORY_EMPTY), Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(Copy.get(this, Copy.Key.CLEAR_TITLE))
+            .setMessage(Copy.get(this, Copy.Key.CLEAR_BODY))
+            .setPositiveButton(Copy.get(this, Copy.Key.DLG_CLEAR)) { _, _ ->
+                OverlayService.transcriptHistory.clear()
+                runCatching { File(filesDir, "transcript.log").delete() }
+                CrashLog.info(this, "command history cleared by the tester")
+                Toast.makeText(this, Copy.get(this, Copy.Key.CLEARED), Toast.LENGTH_SHORT).show()
+                onCleared()
+            }
+            .setNegativeButton(Copy.get(this, Copy.Key.EXPORT_CANCEL), null)
+            .show()
     }
 
     private fun showSystemLog() {
@@ -256,6 +332,7 @@ class SettingsActivity : AppCompatActivity() {
      * the copy in `strings.xml` in the same commit.
      */
     private fun confirmExport() {
+        OverlayService.ensureHistoryLoaded(this)
         if (OverlayService.transcriptHistory.isEmpty()) {
             Toast.makeText(this, Copy.get(this, Copy.Key.EXPORT_EMPTY), Toast.LENGTH_LONG).show()
             return

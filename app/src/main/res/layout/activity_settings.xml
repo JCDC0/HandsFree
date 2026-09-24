@@ -220,23 +220,6 @@
             android:textColor="@color/hf_button_neutral_text"
             android:layout_marginBottom="10dp" />
 
-        <!-- The tester's route back to us: writes the log to a file and hands it
-             to the share sheet, for the Google Form. Accent-coloured because on
-             a testing build it is the most important button on this screen. -->
-        <Button
-            android:id="@+id/export_log_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="52dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:text=""
-            android:textSize="14sp"
-            android:lineSpacingExtra="2sp"
-            android:backgroundTint="@color/hf_button_accent_bg"
-            android:textColor="@color/hf_button_accent_text"
-            android:layout_marginBottom="20dp" />
-
         <!-- Build stamp. It is already in every exported log; putting it on
              screen means a tester can read it out over chat without exporting
              anything, which is how most bug reports actually arrive. -->
