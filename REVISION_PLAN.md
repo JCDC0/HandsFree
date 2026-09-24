@@ -26,13 +26,23 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | W1 | Code done in `41e66c7` (1.5.3). **Device tests failed 2026-09-24.** Fixes are W1b. | JC's device report, Log 2026-09-24 (device tests) |
 | W1b | **Closed 2026-09-24.** Tests 1 to 4 pass on device (1.5.5 fixes the Test 3 defect, re-tested). Test 5 (TalkBack) dropped by JC. Merged to `master`. | Log 2026-09-24 (W1b closed) |
 | W2 | **Part A done in 1.5.6, device test pending.** Panel item 12. 17 lexicon entries, simulator 18 of 18. Part B (general prefix rule in `TranslationLayer`, `DEV_GUIDE.md` 6a) deferred: Part A answers the panel item, and Part B touches a handle-with-care file on a time budget. | Log 2026-09-24 (W2 Part A) |
-| W3 | **Code done in 1.6.1 on branch `w3-redesign`, awaiting JC's review.** Items 1 to 8 done: drawer, stacked activators, pixel-art style, screen-edge glow. 1.6.1 adds a Pixel-art style switch in the drawer (standard look when off), answering Harold's preference for normal buttons, and centres the activator icons. Not yet verified: touch pass-through under the glow, light theme. | Log 2026-09-24 (W3), CHANGELOG 1.6.1 |
-| W7 | **Code done in 1.7.0 on `w3-redesign`.** Offline text-to-speech feedback with the mic gated during speech; Settings switch. Device-checked: voice selection, capture gate timing. Not yet checked by ear by JC. | CHANGELOG 1.7.0 |
+| W3 | **Closed 2026-09-24, merged to `master` in 1.7.1.** Drawer, stacked activators, screen-edge glow, floating button; standard look by default with a pixel-art switch in Settings. JC reviewed on device. | Log 2026-09-24 (W3 and W7 closed) |
+| W7 | **Closed 2026-09-24, merged in 1.7.1.** Offline spoken feedback; start beep instead of a spoken "Listening" so the first word is kept (JC confirmed the fix on device). | Log 2026-09-24 (W3 and W7 closed) |
 | W4 | Parked. Not on the panel form. | |
 | W5 | **Cancelled 2026-09-24.** Karl's training setup kept breaking and he decided to keep Hey Jarvis. Not a panel item. | Karl, relayed by JC |
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (W3 and W7 closed), Cowork-Claude.** JC confirmed on device that
+1.7.1 keeps the first word after a button press, and approved the W3 look (style
+switch, floating button). `w3-redesign` merged to `master`. A debug APK of
+1.7.1 was placed in the thesis Drive root as `HandsFree-1.7.1-tester.apk`; the
+1.5.2 APK moved to `_ARCHIVE`. The manuscript items this implies are in
+`Manuscript/2026-09-24_JC_manuscript-revisions-for-Eriel.pdf`, section 2.
+Still unverified: touch pass-through under the glow was not tested by adb, but
+JC used the phone normally with the glow in place; the light theme was not
+checked.
 
 **2026-09-24 (W3), Cowork-Claude.** Done while JC was away, per his
 instruction to iterate on the connected phone.
