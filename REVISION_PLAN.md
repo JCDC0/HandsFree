@@ -24,7 +24,7 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | ID | State | Evidence |
 |---|---|---|
 | W1 | Code done in `41e66c7` (1.5.3). **Device tests failed 2026-09-24.** Fixes are W1b. | JC's device report, Log 2026-09-24 (device tests) |
-| W1b | **Tests 1, 2, 4 pass on 1.5.4. Test 3 passes with one new defect, fixed in 1.5.5 (device re-test pending). Test 5 not run.** Branch `w1b-device-fixes`, not merged. | Log 2026-09-24 (1.5.4 device re-test) |
+| W1b | **Closed 2026-09-24.** Tests 1 to 4 pass on device (1.5.5 fixes the Test 3 defect, re-tested). Test 5 (TalkBack) dropped by JC. Merged to `master`. | Log 2026-09-24 (W1b closed) |
 | W2 | Not started. Panel item 12: "make it understand i-click or remove the hyphen". `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
 | W3 | Not started. Needed before the app expert receives the APK. Scope widened 2026-09-24: pixel-art popup and a screen-edge listening glow. | |
 | W7 | Not started. Spoken announcements (offline text to speech). Requested 2026-09-24. | |
@@ -33,6 +33,17 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (W1b closed), Cowork-Claude.** JC re-tested 1.5.5 (`54cdb0c`):
+spamming activation with the call sign on and the app closed no longer gives a
+half-second popup or a half-second listen. W1b closed and `w1b-device-fixes`
+merged to `master`.
+- **Decision (JC): TalkBack is out of scope.** JC tried it on the TECNO LJ9 and
+  found the two-finger and double-tap controls unreliable. Test 5 is dropped.
+  Spoken feedback comes from HandsFree itself through the phone's own
+  text-to-speech engine (W7). W7 item 3 (hand speech to TalkBack) is removed.
+- Priority set by JC: work on the app only, on a time budget. Order stays W2,
+  W3 with the visual pass, W7.
 
 **2026-09-24 (1.5.4 device re-test), Cowork-Claude.** Built `fe775f5` on JC's
 PC: `testDebugUnitTest` 19 of 19 pass, `assembleDebug` pass, stamp clean.
@@ -614,9 +625,8 @@ for example "Nakikinig" on activation and "Binubuksan ang YouTube" on success.
 2. Never speak while the mic is open. Speak the activation cue, wait for
    `UtteranceProgressListener.onDone`, then start capture. Otherwise Whisper
    transcribes the app's own voice.
-3. If TalkBack is running (`AccessibilityManager.isTouchExplorationEnabled`),
-   send the line with `announceForAccessibility` instead of our own voice, so
-   the user does not hear two voices.
+3. (Removed 2026-09-24. TalkBack is out of scope by JC's decision. HandsFree
+   speaks through the phone's text-to-speech engine only.)
 4. Add a setting to turn announcements off, default on. Lines go in `Copy.kt`
    so they follow the Tagalog and English toggle.
 5. Lines only for: activation, "did not understand", command result, error.
