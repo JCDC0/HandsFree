@@ -22,8 +22,7 @@ import com.example.handsfree.pipeline.LevenshteinMatcher
 import com.example.handsfree.service.OverlayService
 import com.example.handsfree.util.Copy
 import com.example.handsfree.util.CrashLog
-import com.example.handsfree.util.PixelCircleDrawable
-import com.example.handsfree.util.PixelFrameDrawable
+import com.example.handsfree.util.UiStyle
 import com.example.handsfree.util.pixelUnit
 import com.example.handsfree.util.setPixelFill
 import com.example.handsfree.util.applySystemBarInsets
@@ -306,7 +305,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         val caption = Copy.get(this, if (running) Copy.Key.BTN_STOP else Copy.Key.BTN_START)
         startCaption.text = caption
         startButton.contentDescription = caption
-        startIcon.setImageResource(if (running) R.drawable.ic_stop else R.drawable.ic_mic)
+        startIcon.setImageResource(if (running) UiStyle.stopIcon(this) else UiStyle.micIcon(this))
         startButton.setPixelFill(
             themed(if (running) R.color.hf_circle_listening_bg else R.color.hf_circle_idle_bg)
         )
@@ -352,20 +351,70 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             }
         })
 
+        styleSwitch = findViewById(R.id.style_switch)
+        styleSwitch.isChecked = UiStyle.isPixel(this)
+        styleSwitch.setOnCheckedChangeListener { _, on ->
+            UiStyle.setPixel(this, on)
+            CrashLog.info(this, "display style set to ${if (on) "pixel" else "standard"}")
+            applyUiStyle()
+        }
+
+        applyUiStyle()
+    }
+
+    private lateinit var styleSwitch: androidx.appcompat.widget.SwitchCompat
+
+    /** The style the screen was last painted in, so onResume repaints only on a change. */
+    private var appliedPixelStyle: Boolean? = null
+
+    /**
+     * Paint the screen in the chosen style ([UiStyle]): pixel-art frames,
+     * icons and fonts, or plain shapes, the original icons and the phone's
+     * font. Called from onCreate, from the drawer switch, and from onResume.
+     */
+    private fun applyUiStyle() {
+        val pixel = UiStyle.isPixel(this)
+        if (appliedPixelStyle == pixel) return
+        appliedPixelStyle = pixel
+
         val border = themed(R.color.hf_px_border)
         val shadow = themed(R.color.hf_px_shadow)
         val start = findViewById<View>(R.id.start_button)
         val wake = findViewById<View>(R.id.wake_word_button)
-        start.background = PixelCircleDrawable(themed(R.color.hf_circle_idle_bg), border, shadow)
-        wake.background = PixelCircleDrawable(themed(R.color.hf_circle_off_bg), border, shadow)
+        start.background = UiStyle.circle(this, themed(R.color.hf_circle_idle_bg), border, shadow)
+        wake.background = UiStyle.circle(this, themed(R.color.hf_circle_off_bg), border, shadow)
+        val elevation = if (pixel) 0f else 4f * resources.displayMetrics.density
+        start.elevation = elevation
+        wake.elevation = elevation
 
         val unit = start.pixelUnit()
         listOf(R.id.status_card, R.id.pipeline_card).forEach { id ->
             findViewById<View>(id).background =
-                PixelFrameDrawable(themed(R.color.hf_card), border, shadow, unit)
+                UiStyle.frame(this, themed(R.color.hf_card), border, shadow, unit)
         }
         findViewById<View>(R.id.warning_card).background =
-            PixelFrameDrawable(themed(R.color.hf_warning_bg), border, shadow, unit)
+            UiStyle.frame(this, themed(R.color.hf_warning_bg), border, shadow, unit)
+
+        debugButton.setImageResource(UiStyle.menuIcon(this))
+        findViewById<ImageView>(R.id.settings_button).setImageResource(UiStyle.settingsIcon(this))
+        findViewById<ImageView>(R.id.wake_word_icon).setImageResource(UiStyle.callSignIcon(this))
+
+        val label = UiStyle.labelFont(this)
+        val body = UiStyle.bodyFont(this)
+        listOf(
+            R.id.app_title, R.id.debug_title, R.id.status_label,
+            R.id.transcribed_label, R.id.translated_label, R.id.intent_label
+        ).forEach { findViewById<TextView>(it).typeface = label }
+        listOf(
+            R.id.subtitle_text, R.id.start_caption, R.id.wake_word_caption,
+            R.id.status_text, R.id.intent_text, R.id.style_switch
+        ).forEach { findViewById<TextView>(it).typeface = body }
+        findViewById<TextView>(R.id.app_title).letterSpacing = if (pixel) 0f else 0.02f
+
+        if (::startIcon.isInitialized) {
+            setStartButtonState(running = pipelineActive)
+            updateWakeWordButton()
+        }
     }
 
     /** The state light on the status card. */
@@ -478,7 +527,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         wakeWordOn = readWakeWordPref()
         // The language toggle lives on the settings screen now, so the choice
         // can change while this activity is stopped. Repaint before anything
-        // reads a label.
+        // reads a label. The style switch lives there too.
+        applyUiStyle()
         applyLanguage()
         advanceOnboarding()
     }
@@ -611,6 +661,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         settingsButton.contentDescription = Copy.get(this, Copy.Key.OPEN_SETTINGS)
         debugTitle.text = Copy.get(this, Copy.Key.DEBUG_TITLE)
         debugButton.contentDescription = Copy.get(this, Copy.Key.DEBUG_OPEN)
+        styleSwitch.text = Copy.get(this, Copy.Key.STYLE_SWITCH)
 
         setStartButtonState(running = pipelineActive)
         updateWakeWordButton()

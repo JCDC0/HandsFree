@@ -534,6 +534,25 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.6.1: style switch in the Debug Screen, activator icons centred
+At JC's request, on branch `w3-redesign`.
+- **"Pixel-art style" switch** at the top of the Debug Screen drawer (in the
+  drawer, not Settings, because it is quicker to reach). On: the 1.6.0 pixel
+  look. Off: plain round buttons with elevation, rounded cards, the original
+  smooth icons (restored from `master` as `ic_*_smooth.xml`, plus a new
+  `ic_menu_smooth`), and the phone's own font. Applies at once. The layout,
+  the drawer and the edge glow are the same in both. Logic in
+  `util/UiStyle.kt`, stored as `pixel_style` in `handsfree_prefs`, default on.
+  The popup reads it each time it opens; the bubble swaps on its next state
+  change.
+- **Fixed**: the activator icons sat lower right of the circle.
+  `PixelCircleDrawable` drew the circle in the top-left of a grid one cell
+  wider than the circle, leaving the shadow cell on the right and bottom, so
+  the circle sat half a cell up and left of the view centre. The grid now has
+  a spare cell on every side and the circle is centred.
+- Checked on the device by screenshot: pixel mode with centred icons, the
+  switch in the drawer, standard mode on the main screen and in the drawer.
+
 ### 2026-09-24: 1.6.0: W3, simplified main screen, pixel-art style, screen-edge glow
 Branch `w3-redesign`, not merged: waiting for JC's review.
 - **Main screen**: the app title, the two activators stacked vertically

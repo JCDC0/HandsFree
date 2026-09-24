@@ -34,7 +34,7 @@ import com.example.handsfree.pipeline.WhisperOnnxEngine
 import com.example.handsfree.util.Copy
 import com.example.handsfree.util.CrashLog
 import com.example.handsfree.util.PixelCircleDrawable
-import com.example.handsfree.util.PixelFrameDrawable
+import com.example.handsfree.util.UiStyle
 import com.example.handsfree.util.pixelUnit
 import com.example.handsfree.util.setPixelFill
 import kotlinx.coroutines.CoroutineScope
@@ -635,8 +635,8 @@ class OverlayService : Service() {
         val label = android.widget.ImageView(this).apply {
             val pad = (15 * density).toInt()
             setPadding(pad, pad, pad, pad)
-            background = PixelCircleDrawable(BUBBLE_IDLE, POPUP_BORDER, POPUP_SHADOW, cells = 14)
-            setImageResource(R.drawable.ic_mic)
+            background = UiStyle.circle(this@OverlayService, BUBBLE_IDLE, POPUP_BORDER, POPUP_SHADOW, cells = 14)
+            setImageResource(UiStyle.micIcon(this@OverlayService))
             imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
             contentDescription = "HandsFree"
         }
@@ -707,10 +707,16 @@ class OverlayService : Service() {
     private fun updateBubble(@Suppress("UNUSED_PARAMETER") glyph: String, tint: Int) {
         mainHandler.post {
             val view = bubbleLabel ?: return@post
+            val ctx = this@OverlayService
             val (icon, fill) = when (tint) {
-                0xFFE53935.toInt() -> R.drawable.ic_stop to BUBBLE_LISTENING
-                0xFF78909C.toInt() -> R.drawable.ic_call_sign to BUBBLE_KWS
-                else -> R.drawable.ic_mic to BUBBLE_IDLE
+                0xFFE53935.toInt() -> UiStyle.stopIcon(ctx) to BUBBLE_LISTENING
+                0xFF78909C.toInt() -> UiStyle.callSignIcon(ctx) to BUBBLE_KWS
+                else -> UiStyle.micIcon(ctx) to BUBBLE_IDLE
+            }
+            // The style switch can change while the bubble is up; swap its
+            // background on the next state change.
+            if ((view.background is PixelCircleDrawable) != UiStyle.isPixel(ctx)) {
+                view.background = UiStyle.circle(ctx, fill, POPUP_BORDER, POPUP_SHADOW, cells = 14)
             }
             view.setImageResource(icon)
             view.setPixelFill(fill)
@@ -735,9 +741,9 @@ class OverlayService : Service() {
         val inflater = android.view.LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.popup_assistant, null)
         val unit = view.pixelUnit()
-        view.background = PixelFrameDrawable(
-            POPUP_FILL, POPUP_BORDER, POPUP_SHADOW, unit
-        )
+        view.background = UiStyle.frame(this, POPUP_FILL, POPUP_BORDER, POPUP_SHADOW, unit)
+        view.findViewById<TextView>(R.id.popup_status_text)?.typeface = UiStyle.labelFont(this)
+        view.findViewById<TextView>(R.id.popup_intent_text)?.typeface = UiStyle.bodyFont(this)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,

@@ -99,10 +99,15 @@ class PixelCircleDrawable(
     }
 
     override fun draw(canvas: Canvas) {
+        // One spare cell on every side, and the circle itself centred in the
+        // bounds. The shadow falls into the spare cell at the right and
+        // bottom. Before 1.6.1 the grid was cells + 1 wide with the circle in
+        // the top-left, so the circle sat half a cell up and left of the view
+        // centre and the centred icon looked pushed to the lower right.
         val size = minOf(bounds.width(), bounds.height()).toFloat()
-        val cell = size / (cells + 1)
-        val ox = bounds.left + (bounds.width() - size) / 2f
-        val oy = bounds.top + (bounds.height() - size) / 2f
+        val cell = size / (cells + 2)
+        val ox = bounds.left + (bounds.width() - cells * cell) / 2f
+        val oy = bounds.top + (bounds.height() - cells * cell) / 2f
         fun cellAt(x: Int, y: Int, shift: Float, color: Int) {
             paint.color = color
             val l = ox + x * cell + shift
@@ -136,6 +141,7 @@ fun View.setPixelFill(color: Int) {
     when (val bg = background) {
         is PixelCircleDrawable -> bg.fill = color
         is PixelFrameDrawable -> bg.fill = color
+        is android.graphics.drawable.GradientDrawable -> bg.setColor(color)
         else -> backgroundTintList = android.content.res.ColorStateList.valueOf(color)
     }
 }

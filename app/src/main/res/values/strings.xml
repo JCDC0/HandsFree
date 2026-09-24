@@ -119,6 +119,8 @@
     <string name="ui_debug_title_en">Debug Screen</string>
     <string name="ui_debug_open_tl">Buksan ang Debug Screen</string>
     <string name="ui_debug_open_en">Open the Debug Screen</string>
+    <string name="ui_style_switch_tl">Pixel-art na itsura</string>
+    <string name="ui_style_switch_en">Pixel-art style</string>
     <string name="ui_dlg_export_tl">I-export</string>
     <string name="ui_dlg_export_en">Export</string>
     <string name="ui_dlg_clear_tl">Burahin</string>
