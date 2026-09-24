@@ -28,6 +28,11 @@
          internet access and the app still opens no socket — see §1 and
          util/Connectivity.kt. There is deliberately no INTERNET permission. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Lets the first-run screen ask to exempt HandsFree from battery
+         optimization. HiOS killed the process when the app was swiped from
+         Recents, which left the accessibility service enabled but not running.
+         Grants no network access. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"

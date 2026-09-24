@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
 import android.widget.ImageView
@@ -221,8 +222,8 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         if (!wakeWordOn && !consented()) { requireConsent(); return }
 
         wakeWordOn = !wakeWordOn
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-            .putBoolean(PREF_WAKE_WORD, wakeWordOn).apply()
+        getSharedPreferences(OverlayService.PREFS, MODE_PRIVATE).edit()
+            .putBoolean(OverlayService.PREF_WAKE_WORD, wakeWordOn).apply()
         updateWakeWordButton()
 
         if (wakeWordOn && !pipelineActive) {
@@ -259,6 +260,14 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
             ).show()
         }
     }
+
+    /**
+     * The service owns this setting and saves it under the same key, so the
+     * circle shows what the service will actually do after a restart.
+     */
+    private fun readWakeWordPref(): Boolean =
+        getSharedPreferences(OverlayService.PREFS, MODE_PRIVATE)
+            .getBoolean(OverlayService.PREF_WAKE_WORD, false)
 
     /**
      * Paint the call-sign circle for its current state: green filled when on,
@@ -343,7 +352,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         translatedLabel = findViewById(R.id.translated_label)
         intentLabel = findViewById(R.id.intent_label)
 
-        wakeWordOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_WAKE_WORD, false)
+        wakeWordOn = readWakeWordPref()
         wakeWordButton.setOnClickListener { toggleWakeWord() }
         settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -414,6 +423,7 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     override fun onResume() {
         super.onResume()
         OverlayService.pipelineListener = this
+        wakeWordOn = readWakeWordPref()
         // The language toggle lives on the settings screen now, so the choice
         // can change while this activity is stopped. Repaint before anything
         // reads a label.
@@ -459,6 +469,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
         if (missing.isNotEmpty()) {
             isSettingUp = true
             showSetupGuide(missing)
+        } else if (!backgroundStepShown()) {
+            markBackgroundStepShown()
+            showBackgroundStep()
         } else if (isSettingUp) {
             isSettingUp = false
             Toast.makeText(this, Copy.get(this, Copy.Key.SETUP_DONE), Toast.LENGTH_SHORT).show()
@@ -631,6 +644,56 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
                 .setPositiveButton(Copy.get(this, Copy.Key.HOWTO_BUTTON), null)
                 .setCancelable(false)
         ).setOnDismissListener { advanceOnboarding() }
+    }
+
+    // ---- step 3: keep the app alive in the background ----
+
+    private fun backgroundStepShown(): Boolean =
+        getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_BACKGROUND_SHOWN, false)
+
+    private fun markBackgroundStepShown() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(PREF_BACKGROUND_SHOWN, true).apply()
+    }
+
+    private fun ignoringBatteryOptimizations(): Boolean =
+        getSystemService(PowerManager::class.java)
+            ?.isIgnoringBatteryOptimizations(packageName) == true
+
+    /**
+     * Shown once, after every permission is granted. HiOS on the TECNO LJ9
+     * killed the process when the app was swiped from Recents, leaving the
+     * accessibility service enabled but not running. The battery exemption
+     * and a Recents lock are the two things a tester can do about that. The
+     * same screen warns against the volume-key shortcut, which on that phone
+     * switched the whole service off.
+     *
+     * Shown once rather than until granted: a tester who refuses the
+     * exemption must still be able to use the app.
+     */
+    private fun showBackgroundStep() {
+        val builder = AlertDialog.Builder(this)
+            .setTitle(Copy.get(this, Copy.Key.BACKGROUND_TITLE))
+            .setMessage(Copy.get(this, Copy.Key.BACKGROUND_BODY))
+            .setNegativeButton(Copy.get(this, Copy.Key.SETUP_CANCEL), null)
+            .setCancelable(false)
+        if (ignoringBatteryOptimizations()) {
+            builder.setPositiveButton(Copy.get(this, Copy.Key.SETUP_NEXT), null)
+        } else {
+            builder.setPositiveButton(Copy.get(this, Copy.Key.BACKGROUND_ALLOW)) { _, _ ->
+                runCatching {
+                    startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = android.net.Uri.parse("package:$packageName")
+                        }
+                    )
+                }.onFailure {
+                    CrashLog.exception(this, "battery exemption request", it)
+                    startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                }
+            }
+        }
+        showFlowDialog(builder).setOnDismissListener { advanceOnboarding() }
     }
 
     override fun onPause() {
@@ -867,9 +930,9 @@ class MainActivity : AppCompatActivity(), OverlayService.PipelineListener {
     }
 
     private companion object {
-        const val PREFS = "handsfree_prefs"
-        const val PREF_WAKE_WORD = "wake_word_enabled"
+        const val PREFS = OverlayService.PREFS
         const val PREF_INTRO_ACCEPTED = "intro_accepted"
         const val PREF_HOWTO_SHOWN = "howto_shown"
+        const val PREF_BACKGROUND_SHOWN = "background_step_shown"
     }
 }

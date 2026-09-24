@@ -24,7 +24,7 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | ID | State | Evidence |
 |---|---|---|
 | W1 | Code done in `41e66c7` (1.5.3). **Device tests failed 2026-09-24.** Fixes are W1b. | JC's device report, Log 2026-09-24 (device tests) |
-| W1b | **Next.** Five defects found by the W1 device tests, plus test card fixes. See the W1b section. | |
+| W1b | **Code done, device tests pending.** 1.5.4-tester on branch `w1b-device-fixes`, not merged. Not built with Gradle: no Android SDK in the session. | Log 2026-09-24 (W1b code) |
 | W2 | Not started. Panel item 12: "make it understand i-click or remove the hyphen". `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
 | W3 | Not started. Needed before the app expert receives the APK. Scope widened 2026-09-24: pixel-art popup and a screen-edge listening glow. | |
 | W7 | Not started. Spoken announcements (offline text to speech). Requested 2026-09-24. | |
@@ -33,6 +33,48 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (W1b code), Claude Code.** W1b items 1 to 6 written, version
+`1.5.4-tester`, versionCode 10, branch `w1b-device-fixes` (not `master`, not
+merged, no pull request). Full list in the `CLAUDE.md` CHANGELOG entry for 1.5.4.
+What changed:
+- Item 1: `STATUS_TRANSCRIBING` added; `STATUS_IDLE` dismisses the popup unless it
+  shows a result. Every no-result path to IDLE emits IDLE.
+- Item 2: `PipelineWatchdog` split into a listen cap (mic window plus 2 s) and an
+  inference cap, `INFERENCE_TIMEOUT_MS = 10000L`. Timeout shows "Hindi
+  naintindihan, subukan ulit" for 2 s and re-arms the call sign. Session numbers
+  in `AppStateMachine`; a late result from an old session is dropped and logged.
+- Item 3: Stop no longer turns the call sign off and re-arms it. The setting is
+  saved by `OverlayService` under `wake_word_enabled` in `handsfree_prefs`, read
+  in `onCreate`; `MainActivity` reads the same key in `onCreate` and `onResume`.
+- Item 4: `CrashLog.reset()` replaced by `CrashLog.rotate()`: `crash_prev.log`
+  kept, one header line per service start, both files in the export.
+- Item 5: both-keys activator removed. New first-run step: battery exemption
+  request (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` declared), lock in Recents, do
+  not assign HandsFree to the volume-key shortcut. How-to and ready hint no
+  longer say to hold both volume keys.
+- Item 6: test card below, in the W1b section.
+How it was verified:
+- `./gradlew testDebugUnitTest` and `./gradlew assembleDebug` **did not run**.
+  There is no Android SDK in the session, and the egress policy answers 403 to
+  `dl.google.com`, which serves both the SDK and the androidx libraries.
+- `AppStateMachineTest` and the new `PipelineWatchdogTest` (18 tests) passed,
+  compiled with Kotlin 2.2.20 and JUnit 4.13.2 in a standalone JVM project. Both
+  classes have no Android imports, so this is the same code the app runs.
+- Every Kotlin file in `app/src/main/java` type-checked against Robolectric's
+  `android-all` API 35 jar, with a generated `R` class, a stub `BuildConfig`, and
+  hand-written stubs for the androidx members the app uses. This catches wrong
+  names, types and missing resources. It is not an Android build: it runs no
+  aapt2, no manifest merge, no dexing, and the androidx stubs could differ from
+  the real classes.
+- `strings.xml` and `AndroidManifest.xml` parse as XML.
+Not verified:
+- A Gradle build and the unit tests under AGP. Run both before installing.
+- Any behaviour on the phone. JC re-runs Tests 1 to 5 from the card below.
+- Whether HiOS still kills the process after the battery exemption and a
+  Recents lock (item 5 device check).
+- The Recents lock wording in the first-run step was written without a TECNO
+  phone in hand; check that it matches HiOS.
 
 **2026-09-24 (device tests), Cowork-Claude.** JC ran the W1 test card on the
 TECNO LJ9 with 1.5.3-tester, versionCode 9, installed clean. Result: W1 is not
@@ -249,6 +291,46 @@ the TECNO LJ9:
 round button on the main screen, not in settings. Test 3 adds the
 closed-app check above. Test 5 gives the TalkBack steps: Settings,
 Accessibility, TalkBack, On; a double tap activates a control while it runs.
+
+**W1 test card, revised for 1.5.4.** The 1.5.3 card was not kept in this repo;
+this version is rebuilt from the Log entry "2026-09-24 (device tests)" with the
+three corrections above. Before starting: install 1.5.4 clean, walk the first
+run, and accept the new "Keep HandsFree running" step.
+
+- **Test 1. Press during transcription.** Press the accessibility button, say a
+  command, and press the button again while the popup reads
+  "Transcribing...". Pass: the second press does nothing, and the popup shows a
+  result or closes. It never stays up more than 10 s after listening ends. If
+  inference passes 10 s, the popup reads "Hindi naintindihan, subukan ulit" for
+  2 s and closes. Also say nothing after one press: the popup must close when
+  the mic window ends. `adb logcat -s OverlayService` shows "Rejected
+  activation" for the second press.
+- **Test 2. Stop keeps the call sign.** Turn the call sign on with the second
+  round button on the main screen (not in settings). Press the large round
+  button, then press it again to stop. Pass: the call-sign circle still reads
+  On, and "Hey Jarvis" still opens the mic about 1 s later. Repeat the "Hey
+  Jarvis" check after Test 3: if the service restarted there, the circle and
+  the behaviour must still agree.
+- **Test 3. App closed.** First run `adb shell settings get secure
+  accessibility_shortcut_target_service`; if it names HandsFree, clear it in
+  Settings, Accessibility, then note it. Run `adb shell dumpsys deviceidle
+  whitelist` and check `ph.edu.hau.handsfree` is listed. Then swipe HandsFree
+  from Recents, wait 60 s, and press the accessibility button. Pass: the popup
+  appears and a command runs. Record in either case: `adb shell dumpsys
+  accessibility` (is the service bound and running), and `adb shell pidof
+  ph.edu.hau.handsfree` (did the process survive). Also hold both volume keys
+  for 3 s: HandsFree must stay enabled.
+- **Test 4. Log survives.** After Tests 1 to 3, export the log from settings.
+  Pass: the file has a SYSTEM LOG and a PREVIOUS SYSTEM LOG section, each
+  starting with a `=== SERVICE START` line that gives the build stamp and a
+  reason, and the Test 1 and 2 entries are present even if Test 3 restarted
+  the service.
+- **Test 5. TalkBack.** Settings, Accessibility, TalkBack, On. While TalkBack
+  runs, one tap selects a control and reads it aloud; a double tap anywhere
+  activates the selected control. Select each round button and check that it
+  names its state (start or stop, call sign on or off). Activate a command with
+  the accessibility button and check the popup does not block TalkBack. Turn
+  TalkBack off the same way; its switch also needs a double tap.
 
 **Verification.** `./gradlew assembleDebug` and the unit tests pass. Add a
 unit test for the session-number drop and one for the inference cap using a

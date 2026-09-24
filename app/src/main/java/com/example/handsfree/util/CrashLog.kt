@@ -27,24 +27,59 @@ import java.util.Locale
  * is the one that was about to run when the process died.
  *
  * The log lives at `context.filesDir/crash.log` (app-private, survives uninstall
- * only until cleared). [reset] wipes it — call this at the start of each fresh
- * pipeline run so the post-mortem log reflects only the most recent attempt.
+ * only until cleared). [rotate] runs once per service start. It moves the
+ * current file to `crash_prev.log` and opens a new one with a header line, so
+ * a restart keeps the evidence of whatever ended the previous instance. It
+ * used to be wiped at every start, which erased exactly that evidence.
  */
 object CrashLog {
 
     private const val TAG = "CrashLog"
     private const val FILE_NAME = "crash.log"
+    private const val PREV_FILE_NAME = "crash_prev.log"
+    private const val START_MARK = "=== SERVICE START"
+    private const val STOP_MARK = "=== SERVICE STOP"
 
     private val tsFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
     /**
-     * Wipe any previous log. Call before the first [step] of a fresh run so the
-     * post-mortem log reflects only the latest attempt.
+     * Start a new log for a new service instance. The previous log becomes
+     * `crash_prev.log`; any older one is dropped, so the two files stay small.
+     *
+     * The header names the reason when it can be told from the previous log:
+     * a previous instance with no [stopped] line after its last start did not
+     * reach `onDestroy`, which means the process was killed.
      */
-    fun reset(context: Context) {
+    fun rotate(context: Context, buildStamp: String) {
         runCatching {
-            File(context.filesDir, FILE_NAME).writeText("")
-        }.onFailure { Log.w(TAG, "reset failed", it) }
+            val current = File(context.filesDir, FILE_NAME)
+            val previous = File(context.filesDir, PREV_FILE_NAME)
+            var reason = "first start"
+            if (current.exists() && current.length() > 0L) {
+                val text = current.readText()
+                val lastStart = text.lastIndexOf(START_MARK)
+                val lastStop = text.lastIndexOf(STOP_MARK)
+                reason = when {
+                    lastStart < 0 -> "previous log had no start header"
+                    lastStop > lastStart -> "previous instance stopped normally"
+                    else -> "previous instance ended without onDestroy (process killed)"
+                }
+                previous.delete()
+                if (!current.renameTo(previous)) {
+                    previous.writeText(text)
+                }
+            }
+            current.writeText("")
+            writeLine(
+                context,
+                "$START_MARK ${dateFormat.format(Date())} build $buildStamp, reason: $reason"
+            )
+        }.onFailure { Log.w(TAG, "rotate failed", it) }
+    }
+
+    fun stopped(context: Context) {
+        writeLine(context, "$STOP_MARK ${dateFormat.format(Date())}")
     }
 
     /**
@@ -90,14 +125,19 @@ object CrashLog {
     /**
      * Read the full crash log, or a placeholder string if absent/empty.
      */
-    fun read(context: Context): String {
+    fun read(context: Context): String = readFile(context, FILE_NAME, "crash log")
+
+    fun readPrevious(context: Context): String =
+        readFile(context, PREV_FILE_NAME, "previous crash log")
+
+    private fun readFile(context: Context, name: String, label: String): String {
         return runCatching {
-            val f = File(context.filesDir, FILE_NAME)
-            if (!f.exists()) "(no crash log yet)"
-            else f.readText().ifEmpty { "(crash log empty)" }
+            val f = File(context.filesDir, name)
+            if (!f.exists()) "(no $label yet)"
+            else f.readText().ifEmpty { "($label empty)" }
         }.getOrElse { e ->
             Log.e(TAG, "read failed", e)
-            "(failed to read crash log: ${e.message})"
+            "(failed to read $label: ${e.message})"
         }
     }
 

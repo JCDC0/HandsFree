@@ -276,13 +276,16 @@ something is broken when it is not.
 > Recorded here so it is not lost.
 
 > [!NOTE]
-> **Known limitation of the pipeline watchdog (1.5.3).** `PipelineWatchdog` resets
-> the state machine to IDLE if a command stalls past the listen window plus
-> `WATCHDOG_INFERENCE_ALLOWANCE_MS`. It recovers the state, not the work: a native
+> **Known limitation of the pipeline watchdog (1.5.3, narrowed in 1.5.4).**
+> `PipelineWatchdog` resets the state machine to IDLE if listening outlasts the
+> mic window plus 2 s, or if inference takes longer than `INFERENCE_TIMEOUT_MS`
+> (10 s) after listening ends. It recovers the state, not the work: a native
 > ONNX inference call that has wedged cannot be killed from Kotlin, so after a
 > watchdog reset a new command can start while the old inference thread is still
-> unwinding. Rare, and better than the app going permanently deaf. If you see one
-> doubled result right after a long hang, this is the cause.
+> unwinding. Since 1.5.4 the old run's result can no longer execute: it carries
+> a stale session number and `CrashLog` records it as dropped. A new capture
+> can still overlap the old inference thread, which is a CPU cost, not a wrong
+> command.
 
 Ordered. Anything below the line is post-demo.
 

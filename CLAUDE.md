@@ -117,7 +117,7 @@ HandsFreeAccessibilityService    gestures, global actions, text input
 | `pipeline/TranslationLayer.kt` | Lexicon normalisation. |
 | `pipeline/AudioPreprocessor.kt` | Mic capture and VAD. |
 | `pipeline/AppStateMachine.kt` | FSM single source of truth for pipeline states. |
-| `pipeline/PipelineWatchdog.kt` | Watchdog recovering non-idle pipeline states on hang. |
+| `pipeline/PipelineWatchdog.kt` | Returns the pipeline to IDLE on a hang. Two caps since 1.5.4: the listen window, and 10 s (`INFERENCE_TIMEOUT_MS`) from the end of listening to a result. |
 | `pipeline/KeywordSpotter.kt` | **Working since 2026-08-24 (§9).** Three-stage ONNX wake cascade. Runs `assets/kws/hey_jarvis_v0.1.onnx` — a **pretrained openWakeWord "Hey Jarvis" model**, not one trained on "Hey HandsFree." Threshold 0.5. See §9 for the naming mismatch this creates. |
 | `pipeline/WakeWordDetector.kt` | Text-level wake gate. Fuzzy-matches Whisper's transcript against `DEFAULT_VARIANTS` ("handsfree", "hansfree", …). In `OverlayService.applyWakeGate()`, this is **bypassed** whenever `awaitingCommand` is true, which is the state `handleKwsAudio()` sets on every KWS detection — so in always-on mode the phrase that actually opens the mic is "Hey Jarvis," and this detector's variant list never runs. |
 | `service/HandsFreeAccessibilityService.kt` | Gestures, global actions, volume-key activator. |
@@ -352,8 +352,20 @@ Do not attempt Messaging or Scheduling live, even if they appear to work.
 
 **Last verified:** 2026-09-24. `1.5.3-tester` (versionCode 9, stamp `41e66c7`)
 compiled, `testDebugUnitTest` green, installed on device 144512558D105352 with the
-accessibility service enabled. **W1 device tests pending.** Progress is tracked in
+accessibility service enabled. **The W1 device tests on 1.5.3 failed** (Tests 1 to
+4); see `REVISION_PLAN.md`, Log 2026-09-24 (device tests). Progress is tracked in
 `REVISION_PLAN.md`, section Ledger.
+
+**`1.5.4-tester` (versionCode 10) is code only: never built with Gradle, never
+installed.** It holds the W1b fixes, on branch `w1b-device-fixes`, not on
+`master`. The session that wrote it had no Android SDK (the egress policy denies
+`dl.google.com`), so `./gradlew assembleDebug` and `./gradlew testDebugUnitTest`
+did not run. What did run: the two pure-JVM test classes
+(`AppStateMachineTest`, `PipelineWatchdogTest`, 18 tests) passed in a standalone
+Kotlin project, and every Kotlin file in `app/src/main/java` type-checked against
+Robolectric's `android-all` jar with stubbed androidx classes. Before anyone
+installs 1.5.4: run both Gradle commands on a machine with the SDK, then JC
+re-runs the W1 test card (`REVISION_PLAN.md`, W1b item 6).
 
 **1.5.2 has since been compiled and run.** Built 2026-09-16 and checked on device
 by JC before the defense. The earlier warning that it had never been compiled is
@@ -412,11 +424,14 @@ LevenshteinMatcher → CommandExecutor → HandsFreeAccessibilityService.
 - SCHEDULING alarm/timer — the permission was only actually granted as of the
   night build; every alarm attempt before it threw `SecurityException`. Never
   once seen to open the Clock app. Treat as unverified.
-- Volume-key activator — accessibility button is used instead; volume path is
-  unverified on this OEM skin
+- Volume-key activator. The accessibility button is used instead; the volume
+  path is unverified on this OEM skin. Since 1.5.4 only the volume-down hold remains:
+  the both-keys activator was removed because holding both volume keys is
+  Android's accessibility shortcut, which on the TECNO LJ9 switched the whole
+  service off.
 - Tap-by-name against a real home screen with folders and emoji labels
 
-**Build identity (current):** `versionName 1.5.3-tester`, `versionCode 9`,
+**Build identity (current, on `master`):** `versionName 1.5.3-tester`, `versionCode 9`,
 `applicationId ph.edu.hau.handsfree`. The exported tester log carries a `Build:`
 line with the git short SHA, so a report traces to an exact commit: always
 rebuild after the final commit before copying to Drive, or the stamp reads
@@ -435,6 +450,8 @@ confirm the share sheet appears and the file opens. On a phone that still has a
 pre-1.1 build, the old id has to go too: `adb uninstall com.example.handsfree`.
 
 **Wired:** `AppStateMachine.kt` (FSM single source of truth for pipeline states, atomic `tryActivate`, and `PipelineWatchdog`).
+Since 1.5.4 every activation and every reset gets a new session number; a
+transcript that arrives for an old session is dropped, not executed.
 
 **Wake word: WORKS as of 2026-08-24.** The 2026-08-20 decision to ship it
 disabled and report it as a limitation was **reversed** at JC's request, and the
@@ -516,6 +533,72 @@ README, manuscript-extract.md.
 ---
 
 ## CHANGELOG
+
+### 2026-09-24: 1.5.4: W1b, fixes from the failed W1 device tests
+Branch `w1b-device-fixes`. Five defects from JC's W1 test run on the TECNO LJ9,
+plus the test card. **Not built with Gradle and not installed** (no Android SDK
+in the session; see section 9).
+
+- **Popup no longer sticks on "Transcribing...".** New `STATUS_TRANSCRIBING`,
+  emitted by `stopListening()` when the state moves to PREPROCESSING. It is now
+  the only status that shows that text. `STATUS_IDLE` dismisses the popup unless
+  it shows a command result or the retry message (`popupShowsResult`). Paths that
+  reach IDLE with no result all go through `endSessionWithoutResult()`: blank
+  transcript, wake gate returns null, no Whisper engine. Explicit stop and the
+  watchdog emit IDLE too. Before, IDLE set the text to "Transcribing..." and only
+  a command or an error removed the popup.
+- **10 s inference cap.** `PipelineWatchdog` now has two caps. LISTENING: the mic
+  window plus `LISTEN_GRACE_MS` (2 s), a backstop for `sleepRunnable`.
+  PREPROCESSING to EXECUTING: `INFERENCE_TIMEOUT_MS = 10000L`, armed once when
+  listening ends. On expiry: IDLE, bubble reset, popup shows "Hindi
+  naintindihan, subukan ulit" (English: "Did not catch that, please try again")
+  for 2 s, call sign re-armed. Replaces `WATCHDOG_INFERENCE_ALLOWANCE_MS` (20 s
+  added to the mic window, so about 24 s in practice).
+- **Session numbers.** `AppStateMachine.activate()` returns a new session number;
+  `reset()` also moves it on. `OverlayService` passes the number through
+  `flushWhisperUtterance` and `handleUtterance` and moves state only with
+  `transitionIfSession()`. A late result from a timed-out or stopped run is
+  refused at the first transition and logged to `CrashLog` as dropped. The
+  watchdog uses `resetIfSession()`, so a timer from an old run cannot reset a new
+  one. The native ONNX call still cannot be killed (`DEV_GUIDE.md` section 6);
+  this stops its result from running a command.
+- **Stop Listening keeps the call sign.** `ACTION_STOP_PIPELINE` no longer sets
+  `wakeWordEnabled = false`; it calls `scheduleRearm()`. Only
+  `ACTION_SET_WAKE_WORD` changes the setting. The service saves it under
+  `OverlayService.PREF_WAKE_WORD` in `handsfree_prefs` and reads it in
+  `onCreate`, so a restarted service keeps it. `MainActivity` and
+  `SettingsActivity` read the same key through the service's constants, and
+  `MainActivity` re-reads it in `onResume`.
+- **The system log survives restarts.** `CrashLog.reset()` is gone.
+  `CrashLog.rotate()` runs in `OverlayService.onCreate`: it moves `crash.log`
+  to `crash_prev.log` and writes one header line per service start (date and
+  time, build stamp, reason). The reason reads "previous instance ended without
+  onDestroy (process killed)" when the previous log has no `SERVICE STOP` line
+  after its last start; `onDestroy` writes that line. The export and the system
+  log viewer include both files.
+- **Both-keys activator removed.** `checkBothKeysActivation` and
+  `BOTH_KEYS_HOLD_MS` are gone from `HandsFreeAccessibilityService`; VOLUME_UP
+  is no longer handled. Holding both volume keys is Android's accessibility
+  shortcut, and on the test phone it was assigned to HandsFree, so the gesture
+  switched the service off ("Held volume keys. HandsFree On/Off"). Volume-down
+  hold, the accessibility button, the bubble and the call sign remain.
+- **New first-run step, "Keep HandsFree running".** Shown once, after all
+  permissions. It requests `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` for the
+  package (new manifest permission `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`; no
+  network access), tells the tester to lock HandsFree in Recents, and says not to
+  assign HandsFree to the volume-key shortcut. Shown once rather than until
+  granted, so a tester who refuses can still use the app.
+- **Copy.** The how-to and the ready hint no longer tell testers to hold both
+  volume keys for 3 s; they say hold volume down for about 1 s, and the how-to
+  warns against holding both keys.
+- **Tests.** `PipelineWatchdogTest` (new, 9 tests, fake scheduler): the cap
+  values, cap re-arming at the end of listening, expiry to IDLE, cancel at IDLE,
+  a stale timer ignored, a late result dropped after a timeout and after a
+  reset. `AppStateMachineTest` updated for the renamed watchdog parameters.
+- `versionName 1.5.4-tester`, `versionCode 10`.
+- **Not verified:** a Gradle build, `testDebugUnitTest` under AGP, any device
+  behaviour, and whether HiOS still kills the process after the battery
+  exemption.
 
 ### 2026-09-24: docs only. Reorientation audit and corrections
 - Section 5: the parameter count now gives both figures and why they differ

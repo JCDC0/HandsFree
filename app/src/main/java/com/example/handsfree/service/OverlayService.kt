@@ -19,6 +19,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import com.example.handsfree.BuildConfig
 import com.example.handsfree.R
 import com.example.handsfree.pipeline.AppStateMachine
 import com.example.handsfree.pipeline.AudioPreprocessor
@@ -30,6 +31,7 @@ import com.example.handsfree.pipeline.SpeechEngine
 import com.example.handsfree.pipeline.TranslationLayer
 import com.example.handsfree.pipeline.WakeWordDetector
 import com.example.handsfree.pipeline.WhisperOnnxEngine
+import com.example.handsfree.util.Copy
 import com.example.handsfree.util.CrashLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -72,8 +74,21 @@ class OverlayService : Service() {
     private val stateMachine = AppStateMachine()
     private lateinit var watchdog: PipelineWatchdog
 
-    /** Always-on call-sign mode. Off unless the user turns it on. */
+    /**
+     * Always-on call-sign mode. Off unless the user turns it on. Loaded from
+     * [PREF_WAKE_WORD] in onCreate and saved by [setWakeWordEnabled], so a
+     * service restart keeps what the main screen shows.
+     */
     private var wakeWordEnabled = false
+
+    private var activeSession = 0L
+
+    /**
+     * True while the popup shows a command result or the retry message. The
+     * IDLE status that follows a result must leave it up for its linger time;
+     * every other IDLE dismisses the popup.
+     */
+    private var popupShowsResult = false
 
     private val wakeWordDetector = WakeWordDetector()
 
@@ -127,8 +142,11 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "onCreate")
-        CrashLog.reset(this)
+        CrashLog.rotate(this, BuildConfig.BUILD_STAMP)
         CrashLog.step(this, "STEP_0: OverlayService.onCreate")
+        wakeWordEnabled = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getBoolean(PREF_WAKE_WORD, false)
+        CrashLog.info(this, "call sign ${if (wakeWordEnabled) "on" else "off"} at start")
 
         runCatching { startForegroundCompat(buildNotification("HandsFree starting…")) }
             .onFailure { CrashLog.exception(this, "STEP_1 startForeground", it); throw it }
@@ -170,15 +188,19 @@ class OverlayService : Service() {
 
         watchdog = PipelineWatchdog(
             stateMachine = stateMachine,
-            timeoutSupplier = { watchdogTimeoutMs() },
+            listenTimeoutMs = { listenWindowMs() + LISTEN_GRACE_MS },
             onExpiry = { stuckState ->
                 Log.e(TAG, "pipeline watchdog expired in state $stuckState")
                 CrashLog.info(this@OverlayService, "pipeline watchdog expired in state $stuckState")
                 mainHandler.post {
+                    mainHandler.removeCallbacks(sleepRunnable)
                     checkStopCapture()
-                    hideAssistantPopup(0L)
                     updateBubble("🎤", 0xFF1E88E5.toInt())
-                    emitStatus(STATUS_IDLE)
+                    if (stuckState == AppStateMachine.State.LISTENING) {
+                        emitStatus(STATUS_IDLE)
+                    } else {
+                        showRetryMessage()
+                    }
                     scheduleRearm()
                 }
             }
@@ -217,11 +239,14 @@ class OverlayService : Service() {
             return
         }
         val previousKws = stateMachine.isKwsListening
-        if (!stateMachine.tryActivate(explicit, awaitingCommand)) {
+        val session = stateMachine.activate(explicit, awaitingCommand)
+        if (session == null) {
             Log.w(TAG, "Rejected activation: pipeline is in state ${stateMachine.currentState}")
             CrashLog.info(this, "rejected activation: state is ${stateMachine.currentState}")
             return
         }
+        activeSession = session
+        CrashLog.info(this, "activation accepted, session $session")
         if (previousKws) {
             Log.i(TAG, "switched from KWS to Whisper")
             kwsBuffer = ShortArray(0)
@@ -250,24 +275,40 @@ class OverlayService : Service() {
             .getInt(PREF_LISTEN_WINDOW_S, DEFAULT_LISTEN_WINDOW_S)
             .coerceIn(MIN_LISTEN_WINDOW_S, MAX_LISTEN_WINDOW_S) * 1000L
 
-    private fun watchdogTimeoutMs(): Long =
-        listenWindowMs() + WATCHDOG_INFERENCE_ALLOWANCE_MS
-
     private fun stopListening(reason: String) {
         if (!stateMachine.isListening) return
         mainHandler.removeCallbacks(sleepRunnable)
-        emitStatus(STATUS_IDLE)
         updateBubble("🎤", 0xFF1E88E5.toInt())
         Log.i(TAG, "stopped listening: $reason")
         CrashLog.info(this, "listening ended: $reason")
-        if (!stateMachine.transitionTo(AppStateMachine.State.PREPROCESSING)) {
+        val session = activeSession
+        if (!stateMachine.transitionIfSession(session, AppStateMachine.State.PREPROCESSING)) {
             stateMachine.reset()
             checkStopCapture()
+            emitStatus(STATUS_IDLE)
             scheduleRearm()
             return
         }
+        emitStatus(STATUS_TRANSCRIBING)
         checkStopCapture()
-        flushWhisperUtterance()
+        flushWhisperUtterance(session)
+    }
+
+    /**
+     * Return to IDLE for [session] with no command result, and dismiss the
+     * popup. Does nothing if the session was already abandoned: whoever
+     * abandoned it has already cleaned up.
+     */
+    private fun endSessionWithoutResult(session: Long, why: String) {
+        if (!stateMachine.transitionIfSession(session, AppStateMachine.State.IDLE)) return
+        CrashLog.info(this, "session $session ended with no command: $why")
+        emitStatus(STATUS_IDLE)
+        scheduleRearm()
+    }
+
+    private fun dropStaleResult(session: Long, what: String) {
+        Log.w(TAG, "dropped $what from session $session (current ${stateMachine.session})")
+        CrashLog.info(this, "dropped $what from session $session, current is ${stateMachine.session}")
     }
 
     private fun checkStopCapture() {
@@ -276,22 +317,26 @@ class OverlayService : Service() {
         }
     }
 
-    /** Whisper emits one result after the listening window, not per audio chunk. */
-    private fun flushWhisperUtterance() {
+    /**
+     * Whisper emits one result after the listening window, not per audio chunk.
+     * The result is used only if [session] is still current: after the
+     * inference cap expires, a late transcript would otherwise run a command
+     * the user no longer expects.
+     */
+    private fun flushWhisperUtterance(session: Long) {
         val whisper = speechEngine as? WhisperOnnxEngine ?: run {
-            stateMachine.transitionTo(AppStateMachine.State.IDLE)
-            scheduleRearm()
+            endSessionWithoutResult(session, "no Whisper engine")
             return
         }
         scope.launch {
             val raw = whisper.onUtteranceComplete()
             mainHandler.post {
-                if (!raw.isNullOrBlank()) {
-                    handleUtterance(raw)
+                if (!stateMachine.isCurrentSession(session)) {
+                    dropStaleResult(session, "transcript \"${raw.orEmpty()}\"")
+                } else if (!raw.isNullOrBlank()) {
+                    handleUtterance(raw, session)
                 } else {
-                    stateMachine.transitionTo(AppStateMachine.State.IDLE)
-                    emitStatus(STATUS_IDLE)
-                    scheduleRearm()
+                    endSessionWithoutResult(session, "blank transcript")
                 }
             }
         }
@@ -336,9 +381,15 @@ class OverlayService : Service() {
     }
 
     private fun setWakeWordEnabled(enabled: Boolean) {
-        if (wakeWordEnabled == enabled) return
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(PREF_WAKE_WORD, enabled).apply()
+        if (wakeWordEnabled == enabled) {
+            if (enabled) scheduleRearm()
+            return
+        }
         wakeWordEnabled = enabled
         Log.i(TAG, "call-sign mode ${if (enabled) "on" else "off"}")
+        CrashLog.info(this, "call sign set ${if (enabled) "on" else "off"}")
         mainHandler.removeCallbacks(rearmRunnable)
         stateMachine.setAwaitingCommand(false)
         if (enabled) {
@@ -385,7 +436,15 @@ class OverlayService : Service() {
                 } else if (stateMachine.isListening) {
                     val raw = speechEngine.acceptWaveform(buffer)
                     if (raw != null && raw.isNotBlank()) {
-                        mainHandler.post { handleUtterance(raw) }
+                        val session = activeSession
+                        mainHandler.post {
+                            if (stateMachine.transitionIfSession(session, AppStateMachine.State.PREPROCESSING)) {
+                                mainHandler.removeCallbacks(sleepRunnable)
+                                handleUtterance(raw, session)
+                            } else {
+                                dropStaleResult(session, "streaming result")
+                            }
+                        }
                     } else {
                         val partial = speechEngine.getPartialResult()
                         if (partial.isNotEmpty()) emitPartial(partial)
@@ -447,21 +506,29 @@ class OverlayService : Service() {
         }
     }
 
-    /** Full path from transcript to executed command. */
-    private fun handleUtterance(raw: String) {
+    /**
+     * Full path from transcript to executed command. Every transition names
+     * [session]; if the watchdog abandoned it in the meantime, the transition
+     * is refused and the command is not executed.
+     */
+    private fun handleUtterance(raw: String, session: Long) {
         val spoken = applyWakeGate(raw) ?: run {
-            stateMachine.transitionTo(AppStateMachine.State.IDLE)
-            emitStatus(STATUS_IDLE)
-            scheduleRearm()
+            endSessionWithoutResult(session, "no call sign")
             return
         }
 
-        stateMachine.transitionTo(AppStateMachine.State.NORMALIZING)
+        if (!stateMachine.transitionIfSession(session, AppStateMachine.State.NORMALIZING)) {
+            dropStaleResult(session, "transcript \"$raw\"")
+            return
+        }
         val normalized = runCatching { translationLayer.normalize(spoken) }
             .getOrElse { spoken }.ifBlank { spoken }
         emitResult(raw, normalized)
 
-        stateMachine.transitionTo(AppStateMachine.State.PROCESSING)
+        if (!stateMachine.transitionIfSession(session, AppStateMachine.State.PROCESSING)) {
+            dropStaleResult(session, "normalized \"$normalized\"")
+            return
+        }
         val match = matcher?.classify(normalized)
         val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
 
@@ -472,7 +539,7 @@ class OverlayService : Service() {
             recordTranscript(logEntry)
 
             emitCommand("NO MATCH", false, resultMsg)
-            stateMachine.transitionTo(AppStateMachine.State.IDLE)
+            stateMachine.transitionIfSession(session, AppStateMachine.State.IDLE)
             emitStatus(STATUS_IDLE)
             scheduleRearm()
             return
@@ -481,7 +548,10 @@ class OverlayService : Service() {
         val (category, phrase) = match
         val intentStr = "$category ($phrase)"
 
-        stateMachine.transitionTo(AppStateMachine.State.EXECUTING)
+        if (!stateMachine.transitionIfSession(session, AppStateMachine.State.EXECUTING)) {
+            dropStaleResult(session, "command $intentStr")
+            return
+        }
         val result = runCatching { commandExecutor.execute(category, normalized, phrase) }
             .getOrElse { CommandExecutor.Result(false, it.message ?: "Execution failed") }
 
@@ -496,7 +566,7 @@ class OverlayService : Service() {
         }
 
         emitCommand(category, result.success, result.message, result.warning)
-        stateMachine.transitionTo(AppStateMachine.State.IDLE)
+        stateMachine.transitionIfSession(session, AppStateMachine.State.IDLE)
         emitStatus(STATUS_IDLE)
         scheduleRearm()
     }
@@ -607,6 +677,7 @@ class OverlayService : Service() {
 
     private fun showAssistantPopup() {
         mainHandler.removeCallbacks(hidePopupRunnable)
+        popupShowsResult = false
         if (popupView != null) return
         if (!Settings.canDrawOverlays(this)) return
         val wm = getSystemService(WindowManager::class.java) ?: return
@@ -655,6 +726,7 @@ class OverlayService : Service() {
     }
 
     private fun dismissAssistantPopup() {
+        popupShowsResult = false
         val v = popupView ?: return
         val wm = windowManager ?: getSystemService(WindowManager::class.java)
         runCatching { wm?.removeView(v) }
@@ -691,8 +763,10 @@ class OverlayService : Service() {
                 popupWarningText?.visibility = View.GONE
             }
             STATUS_KWS_LISTENING -> Unit
-            STATUS_IDLE, "STOPPED" -> popupStatusText?.text = "Transcribing..."
+            STATUS_TRANSCRIBING -> popupStatusText?.text = "Transcribing..."
+            STATUS_IDLE -> if (!popupShowsResult) hideAssistantPopup(0L)
             STATUS_MODEL_ERROR -> {
+                popupShowsResult = true
                 popupStatusText?.text = "Error"
                 popupStatusText?.setTextColor(android.graphics.Color.RED)
                 hideAssistantPopup(3000L)
@@ -704,6 +778,7 @@ class OverlayService : Service() {
         Log.i(TAG, "command $i success=$ok :: $m${warning?.let { " :: WARN $it" }.orEmpty()}")
         mainHandler.post {
             pipelineListener?.onCommandExecuted(i, ok, m, warning)
+            popupShowsResult = popupView != null
             popupIntentText?.visibility = View.VISIBLE
             popupIntentText?.text = if (ok) "$i: $m" else "$i FAILED: $m"
             popupIntentText?.setTextColor(if (ok) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#E57373"))
@@ -715,6 +790,23 @@ class OverlayService : Service() {
             hideAssistantPopup(linger)
         }
         runCatching { startForegroundCompat(buildNotification(warning ?: m)) }
+    }
+
+    /**
+     * Shown when the inference cap expires. Tells the main screen the pipeline
+     * is idle, then keeps the message in the popup for [RETRY_LINGER_MS].
+     */
+    private fun showRetryMessage() {
+        val message = Copy.get(this, Copy.Key.POPUP_RETRY)
+        pipelineListener?.onStatusChanged(STATUS_IDLE)
+        if (popupView == null) showAssistantPopup()
+        popupStatusText?.text = message
+        popupTranscriptionText?.text = "..."
+        popupIntentText?.visibility = View.GONE
+        popupWarningText?.visibility = View.GONE
+        popupShowsResult = popupView != null
+        hideAssistantPopup(RETRY_LINGER_MS)
+        runCatching { startForegroundCompat(buildNotification(message)) }
     }
 
     private fun emitError(message: String) {
@@ -730,8 +822,8 @@ class OverlayService : Service() {
             ACTION_START -> startListening(explicit = true)
             ACTION_ENSURE_RUNNING -> Unit
             ACTION_STOP_PIPELINE -> {
-                wakeWordEnabled = false
                 mainHandler.removeCallbacks(rearmRunnable)
+                CrashLog.info(this, "explicit stop in state ${stateMachine.currentState}")
                 if (stateMachine.isKwsListening) {
                     stopKwsListening("explicit stop")
                 }
@@ -739,7 +831,11 @@ class OverlayService : Service() {
                     stopListening("explicit stop")
                 } else {
                     stateMachine.reset()
+                    mainHandler.removeCallbacks(sleepRunnable)
                     checkStopCapture()
+                    updateBubble("🎤", 0xFF1E88E5.toInt())
+                    emitStatus(STATUS_IDLE)
+                    scheduleRearm()
                 }
             }
             ACTION_SET_WAKE_WORD ->
@@ -750,6 +846,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
+        CrashLog.stopped(this)
         if (::watchdog.isInitialized) {
             watchdog.release()
         }
@@ -829,7 +926,9 @@ class OverlayService : Service() {
         const val DEFAULT_LISTEN_WINDOW_S = 4
         const val MIN_LISTEN_WINDOW_S = 3
         const val MAX_LISTEN_WINDOW_S = 10
-        private const val PREFS = "handsfree_prefs"
+        const val PREFS = "handsfree_prefs"
+
+        const val PREF_WAKE_WORD = "wake_word_enabled"
 
         /**
          * Entries kept in the transcript log, newest first. Every one is a few
@@ -838,7 +937,14 @@ class OverlayService : Service() {
          */
         const val HISTORY_LIMIT = 75
 
-        const val WATCHDOG_INFERENCE_ALLOWANCE_MS = 20000L
+        /**
+         * Extra time past the mic window before the watchdog ends LISTENING.
+         * The listen timer normally ends it first; this only catches a timer
+         * that never ran.
+         */
+        const val LISTEN_GRACE_MS = 2000L
+
+        private const val RETRY_LINGER_MS = 2000L
 
         /** How long the result popup stays on screen once the command has run. */
         private const val RESULT_LINGER_MS = 3000L
@@ -874,6 +980,7 @@ class OverlayService : Service() {
         const val STATUS_PREPARING = "PREPARING"
         const val STATUS_IDLE = "IDLE"
         const val STATUS_LISTENING = "LISTENING"
+        const val STATUS_TRANSCRIBING = "TRANSCRIBING"
         const val STATUS_KWS_LISTENING = "KWS_LISTENING"
         const val STATUS_MODEL_ERROR = "MODEL_ERROR"
 

@@ -13,6 +13,12 @@ package com.example.handsfree.pipeline
  *
  * Transitions are rigidly enforced to prevent concurrent command processing.
  * All state mutations and queries are serialized on an internal monitor.
+ *
+ * Every activation gets a new session number, and so does every [reset]. A
+ * native ONNX call cannot be killed, so a transcript can arrive after the
+ * watchdog has given up on it. Callers that finish work on another thread
+ * pass the session they started with to [transitionIfSession]; a stale number
+ * is refused, and the late result is dropped rather than executed.
  */
 class AppStateMachine {
 
@@ -45,6 +51,10 @@ class AppStateMachine {
     val isAwaitingCommand: Boolean
         get() = synchronized(this) { _isAwaitingCommand }
 
+    private var _session: Long = 0L
+    val session: Long
+        get() = synchronized(this) { _session }
+
     private val listeners = mutableListOf<(State, State) -> Unit>()
 
     private val validTransitions: Map<State, Set<State>> = mapOf(
@@ -56,8 +66,16 @@ class AppStateMachine {
         State.EXECUTING     to setOf(State.IDLE)
     )
 
-    fun transitionTo(newState: State): Boolean {
+    fun transitionTo(newState: State): Boolean = transitionChecked(null, newState)
+
+    fun transitionIfSession(session: Long, newState: State): Boolean =
+        transitionChecked(session, newState)
+
+    fun isCurrentSession(session: Long): Boolean = synchronized(this) { _session == session }
+
+    private fun transitionChecked(session: Long?, newState: State): Boolean {
         val (oldState, targets) = synchronized(this) {
+            if (session != null && session != _session) return false
             if (newState == _currentState) return false
 
             val allowed = validTransitions[_currentState] ?: return false
@@ -75,24 +93,27 @@ class AppStateMachine {
         return true
     }
 
-    fun tryActivate(explicit: Boolean, awaitingCommand: Boolean = false): Boolean {
-        val (oldState, targets) = synchronized(this) {
+    fun tryActivate(explicit: Boolean, awaitingCommand: Boolean = false): Boolean =
+        activate(explicit, awaitingCommand) != null
+
+    fun activate(explicit: Boolean, awaitingCommand: Boolean = false): Long? {
+        val (session, targets) = synchronized(this) {
             if (_currentState != State.IDLE) {
-                return false
+                return null
             }
-            val old = _currentState
             _currentState = State.LISTENING
+            _session++
             _isKwsListening = false
             _isExplicitActivation = explicit
             _isAwaitingCommand = awaitingCommand
-            Pair(old, listeners.toList())
+            Pair(_session, listeners.toList())
         }
 
         for (listener in targets) {
-            listener(oldState, State.LISTENING)
+            listener(State.IDLE, State.LISTENING)
         }
 
-        return true
+        return session
     }
 
     fun startKws(): Boolean = synchronized(this) {
@@ -130,9 +151,24 @@ class AppStateMachine {
     }
 
     fun reset() {
+        resetChecked(null)
+    }
+
+    /**
+     * Reset only if [session] is still the current one and the pipeline is not
+     * idle. Returns the state that was abandoned, or null if nothing was reset.
+     * Lets a timer armed for one activation fire late without touching the next.
+     */
+    fun resetIfSession(session: Long): State? = resetChecked(session)
+
+    private fun resetChecked(session: Long?): State? {
         val (oldState, targets) = synchronized(this) {
+            if (session != null && (session != _session || _currentState == State.IDLE)) {
+                return null
+            }
             val old = _currentState
             _currentState = State.IDLE
+            _session++
             _isKwsListening = false
             _isExplicitActivation = false
             _isAwaitingCommand = false
@@ -144,5 +180,6 @@ class AppStateMachine {
                 listener(oldState, State.IDLE)
             }
         }
+        return oldState
     }
 }

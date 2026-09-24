@@ -139,7 +139,8 @@ class AppStateMachineTest {
 
         val watchdog = PipelineWatchdog(
             stateMachine = fsm,
-            timeoutSupplier = { 50L },
+            listenTimeoutMs = { 50L },
+            inferenceTimeoutMs = { 50L },
             onExpiry = { state ->
                 stuckStateRef.set(state)
                 recoveredLatch.countDown()

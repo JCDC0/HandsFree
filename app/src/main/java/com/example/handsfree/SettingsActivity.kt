@@ -209,7 +209,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun showSystemLog() {
         showTextDialog(
             Copy.get(this, Copy.Key.DLG_SYSLOG),
-            CrashLog.read(this),
+            CrashLog.read(this) + "\n\n----- PREVIOUS START -----\n\n" + CrashLog.readPrevious(this),
             clipLabel = "HandsFree crash log"
         )
     }
@@ -318,8 +318,8 @@ class SettingsActivity : AppCompatActivity() {
             "${info.versionName} (${info.longVersionCode})"
         }.getOrElse { "unknown" }
 
-        val wakeWordOn = getSharedPreferences(PREFS, MODE_PRIVATE)
-            .getBoolean(PREF_WAKE_WORD, false)
+        val wakeWordOn = getSharedPreferences(OverlayService.PREFS, MODE_PRIVATE)
+            .getBoolean(OverlayService.PREF_WAKE_WORD, false)
         val history = OverlayService.transcriptHistory
         return buildString {
             appendLine("HandsFree tester log export")
@@ -365,12 +365,17 @@ class SettingsActivity : AppCompatActivity() {
             appendLine(CrashLog.read(this@SettingsActivity))
             appendLine()
             appendLine("-".repeat(60))
+            appendLine("PREVIOUS SYSTEM LOG (the service instance before this one)")
+            appendLine("-".repeat(60))
+            appendLine()
+            appendLine(CrashLog.readPrevious(this@SettingsActivity))
+            appendLine()
+            appendLine("-".repeat(60))
             appendLine("END OF EXPORT. Salamat po!")
         }
     }
 
     private companion object {
-        const val PREFS = "handsfree_prefs"
-        const val PREF_WAKE_WORD = "wake_word_enabled"
+        const val PREFS = OverlayService.PREFS
     }
 }

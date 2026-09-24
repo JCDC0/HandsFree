@@ -171,11 +171,13 @@ first editable node in the tree.
    `AccessibilityButtonController`, enabled by `flagRequestAccessibilityButton`.
    This is the primary path; it is OS-provided and cannot be intercepted by the
    OEM skin.
-2. **Volume-key hold** — `VOLUME_DOWN` alone for 1200 ms, or both volume keys
-   together for 600 ms. Requires `canRequestFilterKeyEvents`. Short presses pass
-   through so the user keeps volume control. **OEM-dependent**: the both-keys
-   variant exists specifically because the Tecno HiOS skin swallows single-key
-   holds before the accessibility service observes them.
+2. **Volume-key hold.** `VOLUME_DOWN` alone for 1200 ms. Requires
+   `canRequestFilterKeyEvents`. Short presses pass through so the user keeps
+   volume control. **OEM-dependent.** Up to 1.5.3 there was also a both-keys
+   variant (600 ms), added because the Tecno HiOS skin swallows single-key
+   holds. It was removed in 1.5.4: holding both volume keys is Android's own
+   accessibility shortcut, and on the test phone that shortcut switched the
+   whole HandsFree service off.
 3. **Floating bubble** — draggable `TYPE_APPLICATION_OVERLAY` view, always
    available.
 
