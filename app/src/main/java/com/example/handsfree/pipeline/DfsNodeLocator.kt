@@ -86,6 +86,62 @@ class DfsNodeLocator {
     }
 
     /**
+     * Spelling-tolerant search, used only after [findBest] and the word-by-word
+     * fallback in CommandExecutor have both missed. Separate from [scoreNode]
+     * on purpose: the exact tiers stay as they are, and this can only turn a
+     * current failure into a tap.
+     *
+     * Each spoken word of four or more letters is compared with each word of a
+     * node's text and content description by edit distance. Allowed distance:
+     * 1 for words of four or five letters, 2 for longer words, the same
+     * tolerance the intent matcher uses. The lowest distance wins; a clickable
+     * node wins a tie. Added 2026-09-24 after "click setings" found no
+     * "Settings" on a device run.
+     *
+     * @return the match, with [Match.label] set to the on-screen word it hit.
+     */
+    fun findFuzzy(root: AccessibilityNodeInfo?, target: String): Match? {
+        if (root == null) return null
+        val spoken = target.lowercase().split(NON_LETTER).filter { it.length >= 4 }
+        if (spoken.isEmpty()) return null
+
+        var best: Match? = null
+        var bestDistance = Int.MAX_VALUE
+        var bestClickable = false
+
+        fun walk(node: AccessibilityNodeInfo?, depth: Int) {
+            if (node == null || depth > MAX_DEPTH) return
+            if (node.isVisibleToUser) {
+                val labels = listOfNotNull(node.text, node.contentDescription)
+                    .flatMap { it.toString().lowercase().split(NON_LETTER) }
+                    .filter { it.length >= 3 }
+                for (word in spoken) {
+                    val allowed = if (word.length <= 5) 1 else 2
+                    for (label in labels) {
+                        val d = LevenshteinMatcher.levenshteinDistance(word, label)
+                        if (d > allowed) continue
+                        val clickable = node.isClickable
+                        val better = d < bestDistance || (d == bestDistance && clickable && !bestClickable)
+                        if (better) {
+                            val r = Rect().also { node.getBoundsInScreen(it) }
+                            if (r.width() > 0 && r.height() > 0) {
+                                best = Match(r, FUZZY_SCORE, label)
+                                bestDistance = d
+                                bestClickable = clickable
+                            }
+                        }
+                    }
+                }
+            }
+            for (i in 0 until node.childCount) walk(node.getChild(i), depth + 1)
+        }
+
+        walk(root, 0)
+        best?.let { Log.d(TAG, "fuzzy \"$target\" -> ${it.label} distance=$bestDistance ${it.bounds}") }
+        return best
+    }
+
+    /**
      * Nearest clickable ancestor of [node], or the node itself.
      *
      * Labels frequently sit on a non-clickable TextView nested inside the
@@ -120,5 +176,10 @@ class DfsNodeLocator {
         private const val MIN_SCORE = 40
 
         private const val CLICKABLE_ANCESTOR_HOPS = 5
+
+        /** Reported score for a [findFuzzy] match. Logging only. */
+        private const val FUZZY_SCORE = 45
+
+        private val NON_LETTER = Regex("[^\\p{L}\\p{N}]+")
     }
 }

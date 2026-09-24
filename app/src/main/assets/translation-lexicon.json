@@ -414,6 +414,16 @@
     "i-skrol": "scroll",
     "i scroll": "scroll",
     "iskrol pababa": "scroll down",
-    "iskrol pataas": "scroll up"
+    "iskrol pataas": "scroll up",
+    "eklik": "click",
+    "itlik": "click",
+    "ipin dot": "press",
+    "iscrawl": "scroll",
+    "scrawl": "scroll",
+    "scrawdown": "scroll down",
+    "bumaba": "scroll down",
+    "kalender": "calendar",
+    "kalindor": "calendar",
+    "setings": "settings"
   }
 }

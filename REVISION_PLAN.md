@@ -34,6 +34,16 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 
 ### Log
 
+**2026-09-24 (1.5.7 tolerant taps), Cowork-Claude.** JC's 1.5.6 log: the
+`i-` words resolve when Whisper hears them; misses come from mishearing and
+from taps that need an exact spelling. JC chose "tolerant taps, then W3".
+Done: W4 item 4 only (fuzzy tolerance at execution), as the new
+`DfsNodeLocator.findFuzzy()` plus a fix to the single-word fallback in
+`CommandExecutor`, and 10 lexicon entries from the log. W4 items 1 to 3
+(typed command object, node cache) stay parked: Whisper inference, about 2 to
+3 s, dominates latency. Simulator 28 of 28. Build 1.5.7, versionCode 13.
+Not verified: fuzzy taps on the device.
+
 **2026-09-24 (W2 Part A), Cowork-Claude.** 17 entries added to
 `translation-lexicon.json` for `i-` forms of click, tap, pindot and scroll,
 hyphenated, joined, and spaced. Verified with a Python replay of

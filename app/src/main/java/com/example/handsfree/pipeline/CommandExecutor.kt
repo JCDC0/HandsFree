@@ -317,18 +317,26 @@ class CommandExecutor(
         nodeLocator.findNode(root, target)?.let { return it to target }
 
         val words = target.split(' ').filter { it.length >= 4 }
-        if (words.size < 2) return null
 
         var best: Pair<Rect, String>? = null
         var bestScore = 0
-        words.forEach { word ->
-            val match = nodeLocator.findBest(a11y.getActiveRoot(), word)
-            if (match != null && match.score > bestScore) {
-                bestScore = match.score
-                best = match.bounds to word
+        if (words.isNotEmpty() && words != listOf(target)) {
+            words.forEach { word ->
+                val match = nodeLocator.findBest(a11y.getActiveRoot(), word)
+                if (match != null && match.score > bestScore) {
+                    bestScore = match.score
+                    best = match.bounds to word
+                }
             }
         }
-        return best
+        if (best != null) return best
+
+        val fuzzy = nodeLocator.findFuzzy(a11y.getActiveRoot(), target)
+        if (fuzzy != null) {
+            Log.i(TAG, "fuzzy tap \"$target\" -> ${fuzzy.label}")
+            return fuzzy.bounds to fuzzy.label
+        }
+        return null
     }
 
     /**

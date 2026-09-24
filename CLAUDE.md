@@ -534,6 +534,29 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.5.7: spelling-tolerant taps, and lexicon entries from the 1.5.6 device log
+From JC's 1.5.6 log: intents resolved but taps missed on near-spellings
+("click setings", "click kalindor"), and several mishearings reached no
+intent. The panelist's point on execution being literal while
+classification is fuzzy (W4 item 4) is the same defect.
+- **`DfsNodeLocator.findFuzzy()`, new and additive.** A handle-with-care
+  file, opened for this specific reason with JC's approval. `scoreNode()` and
+  its tiers are unchanged. The new function compares each spoken word of four
+  or more letters with each word on a node's text or content description:
+  distance 1 allowed for 4 to 5 letters, 2 for longer. It runs only after the
+  exact search and the word-by-word search both miss.
+- **`CommandExecutor.bestNodeFor()`**: the word-by-word fallback used to
+  return nothing when the target held only one word of four or more letters
+  ("of steam" leaves "steam"). It now tries that word, then `findFuzzy`.
+- Lexicon: `eklik`, `itlik` to `click`; `ipin dot` to `press`; `iscrawl`,
+  `scrawl` to `scroll`; `scrawdown` to `scroll down`; `bumaba` to
+  `scroll down` (it was reaching APP_LAUNCH through `bukas` at distance 2);
+  `kalender`, `kalindor` to `calendar`; `setings` to `settings`.
+- Simulator: 28 of 28 cases pass, no ties.
+- Not verified by a unit test: `findFuzzy` walks real accessibility nodes,
+  so it is checked on the device only. A near-spelling can now tap a
+  different control with a similar name (for example "steam" and "stream").
+
 ### 2026-09-24: 1.5.6: W2 Part A, the app understands i-click with or without the hyphen
 Panel item 12. Lexicon only, no Kotlin change. 17 entries added to
 `translation-lexicon.json`: `iklik`, `i-klik`, `i click`, `i klik` to `click`;
