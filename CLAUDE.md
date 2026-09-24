@@ -534,6 +534,23 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.5.6: W2 Part A, the app understands i-click with or without the hyphen
+Panel item 12. Lexicon only, no Kotlin change. 17 entries added to
+`translation-lexicon.json`: `iklik`, `i-klik`, `i click`, `i klik` to `click`;
+`itap`, `i tap` to `tap on`; `ipindot`, `i-pindot`, `i pindot`, `ipindutin`,
+`i-pindutin`, `ipindutan` to `press`; `iscroll`, `i-skrol`, `i scroll` to
+`scroll`; `iskrol pababa`, `iskrol pataas` to `scroll down` and `scroll up`.
+The spaced two-word forms cover Whisper writing the prefix as its own token.
+- Checked with the offline simulator from `DEV_GUIDE.md` section 5
+  (normalize, classify, both `CommandExecutor` reroutes): 18 of 18 cases
+  pass, no ties. `iklik ang klok` and `itap ang messay jess`, the two failures
+  in the 26 August device log, now reach NAVIGATION. `isang oras`, `iyong` and
+  `instagram` are unchanged.
+- No existing key was edited, so utterances without these tokens normalize
+  exactly as before.
+- Part B (the general prefix rule in `TranslationLayer`) is not done. See the
+  Ledger.
+
 ### 2026-09-24: 1.5.5: listening no longer ends a fraction of a second after activation
 Found in the 1.5.4 device re-test. Logcat showed "Silence detected (VAD)"
 40 to 110 ms after activation, so the popup flashed and closed. Cause: the

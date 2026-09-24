@@ -25,7 +25,7 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 |---|---|---|
 | W1 | Code done in `41e66c7` (1.5.3). **Device tests failed 2026-09-24.** Fixes are W1b. | JC's device report, Log 2026-09-24 (device tests) |
 | W1b | **Closed 2026-09-24.** Tests 1 to 4 pass on device (1.5.5 fixes the Test 3 defect, re-tested). Test 5 (TalkBack) dropped by JC. Merged to `master`. | Log 2026-09-24 (W1b closed) |
-| W2 | Not started. Panel item 12: "make it understand i-click or remove the hyphen". `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
+| W2 | **Part A done in 1.5.6, device test pending.** Panel item 12. 17 lexicon entries, simulator 18 of 18. Part B (general prefix rule in `TranslationLayer`, `DEV_GUIDE.md` 6a) deferred: Part A answers the panel item, and Part B touches a handle-with-care file on a time budget. | Log 2026-09-24 (W2 Part A) |
 | W3 | Not started. Needed before the app expert receives the APK. Scope widened 2026-09-24: pixel-art popup and a screen-edge listening glow. | |
 | W7 | Not started. Spoken announcements (offline text to speech). Requested 2026-09-24. | |
 | W4 | Parked. Not on the panel form. | |
@@ -33,6 +33,16 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (W2 Part A), Cowork-Claude.** 17 entries added to
+`translation-lexicon.json` for `i-` forms of click, tap, pindot and scroll,
+hyphenated, joined, and spaced. Verified with a Python replay of
+`TranslationLayer.normalize`, `LevenshteinMatcher.classify` and both
+`CommandExecutor` reroutes: 18 of 18 cases pass, no distance-0 ties, guard
+words (`isang oras`, `iyong`, `instagram`) unchanged. The 52-command matrix
+was not re-run; no existing key changed, so only utterances holding a new
+token can behave differently. Build 1.5.6, versionCode 12. Not verified: the
+live phone test.
 
 **2026-09-24 (W1b closed), Cowork-Claude.** JC re-tested 1.5.5 (`54cdb0c`):
 spamming activation with the call sign on and the app closed no longer gives a
