@@ -119,6 +119,21 @@ class Announcer(context: Context) {
         if (result != TextToSpeech.SUCCESS) finish(id)
     }
 
+    /**
+     * Short start-of-listening beep, about [CUE_MS] long. Used instead of a
+     * spoken word since 1.7.1: a spoken "Listening" delayed the mic by about
+     * a second and testers started talking over it, so the first word of the
+     * command was lost. [onDone] runs on the main thread when the beep ends.
+     */
+    fun cue(onDone: () -> Unit) {
+        val played = runCatching {
+            val tone = android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, CUE_VOLUME)
+            tone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, CUE_MS)
+            main.postDelayed({ runCatching { tone.release() } }, CUE_MS + 200L)
+        }.isSuccess
+        main.postDelayed(onDone, if (played) CUE_MS + CUE_TAIL_MS else 0L)
+    }
+
     fun stop() {
         runCatching { tts?.stop() }
     }
@@ -133,5 +148,9 @@ class Announcer(context: Context) {
 
     companion object {
         private const val TAG = "Announcer"
+        const val CUE_MS = 120
+        /** Extra time after the beep before audio is accepted, for its echo to fade. */
+        private const val CUE_TAIL_MS = 40L
+        private const val CUE_VOLUME = 70
     }
 }

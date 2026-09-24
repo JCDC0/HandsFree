@@ -286,10 +286,20 @@ class OverlayService : Service() {
         }
         emitStatus(STATUS_LISTENING)
         updateBubble("●", 0xFFE53935.toInt())
+        // The mic starts now, whatever else happens, so the first word is not
+        // lost to microphone start-up. With spoken feedback on, a short beep
+        // plays and audio is dropped for its ~160 ms only (1.7.1). 1.7.0 spoke
+        // "Listening" and opened the mic after it, about a second late, and
+        // testers' first words were cut off ("san mo ang youtube").
         if (UiStyle.speechEnabled(this)) {
-            announce(say(Copy.Key.SAY_LISTENING)) {
-                if (stateMachine.isCurrentSession(session) && stateMachine.isListening) {
-                    beginCapture()
+            cancelAnnouncement()
+            announcing = true
+            val token = announceToken
+            beginCapture()
+            announcer.cue {
+                if (token == announceToken) {
+                    announcing = false
+                    audioPreprocessor.resetVad()
                 }
             }
         } else {
@@ -299,8 +309,7 @@ class OverlayService : Service() {
 
     /**
      * Open the listening window: reset the silence detector, start capture,
-     * and arm the mic-window timer. Runs straight after activation, or after
-     * the spoken "Listening" line has finished when spoken feedback is on.
+     * and arm the mic-window timer. Runs straight after activation.
      */
     private fun beginCapture() {
         listenStartedAt = android.os.SystemClock.elapsedRealtime()

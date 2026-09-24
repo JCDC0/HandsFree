@@ -534,6 +534,20 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.7.1: start beep instead of a spoken "Listening", mic opens at once
+JC's 1.7.0 log showed the first word cut off after a button press: "san mo
+ang youtube", "lan ang youtube", "on youtube". Cause: 1.7.0 opened the mic
+only after the spoken "Listening" finished (about 1.1 s) plus microphone
+start-up, and testers began speaking before that. Hey Jarvis was cleaner
+because its mic was already running.
+- The mic now starts at activation in every case (`beginCapture()` runs
+  first).
+- With spoken feedback on, the activation cue is a 120 ms beep
+  (`Announcer.cue()`, `ToneGenerator`), and audio is dropped only for the
+  beep plus 40 ms. The silence detector is reset when the gate opens.
+- Spoken result lines are unchanged: they play after the mic has closed.
+- Not verified by voice: needs JC's device test.
+
 ### 2026-09-24: 1.7.0: W7 spoken feedback, floating button shown when the app opens
 On branch `w3-redesign`.
 - **Spoken feedback (W7)**, `service/Announcer.kt`, through the phone's own
