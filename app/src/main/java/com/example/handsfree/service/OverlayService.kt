@@ -83,6 +83,8 @@ class OverlayService : Service() {
 
     private var activeSession = 0L
 
+    @Volatile private var listenStartedAt = 0L
+
     /**
      * True while the popup shows a command result or the retry message. The
      * IDLE status that follows a result must leave it up for its linger time;
@@ -253,6 +255,8 @@ class OverlayService : Service() {
         }
         emitStatus(STATUS_LISTENING)
         updateBubble("●", 0xFFE53935.toInt())
+        listenStartedAt = android.os.SystemClock.elapsedRealtime()
+        audioPreprocessor.resetVad()
         startCaptureIfNeeded()
         mainHandler.removeCallbacks(sleepRunnable)
         mainHandler.postDelayed(sleepRunnable, listenWindowMs())
@@ -452,8 +456,11 @@ class OverlayService : Service() {
                 }
             },
             onSilenceDetected = {
-                if (stateMachine.isListening) {
-                    mainHandler.post { stopListening("Silence detected (VAD)") }
+                val listenedMs = android.os.SystemClock.elapsedRealtime() - listenStartedAt
+                if (stateMachine.isListening && listenedMs >= MIN_LISTEN_MS) {
+                    mainHandler.post { stopListening("Silence detected (VAD) after ${listenedMs} ms") }
+                } else if (stateMachine.isListening) {
+                    Log.i(TAG, "ignored VAD silence ${listenedMs} ms into listening")
                 }
             },
             onError = { error -> handleBackendError(error) }
@@ -945,6 +952,14 @@ class OverlayService : Service() {
         const val LISTEN_GRACE_MS = 2000L
 
         private const val RETRY_LINGER_MS = 2000L
+
+        /**
+         * Trailing silence cannot end a session sooner than this after
+         * activation. Backstop for [AudioPreprocessor.resetVad]: the reset is
+         * applied on the next audio chunk, so one chunk of old state can
+         * still slip through.
+         */
+        private const val MIN_LISTEN_MS = 1000L
 
         /** How long the result popup stays on screen once the command has run. */
         private const val RESULT_LINGER_MS = 3000L

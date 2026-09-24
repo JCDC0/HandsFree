@@ -534,10 +534,24 @@ README, manuscript-extract.md.
 
 ## CHANGELOG
 
+### 2026-09-24: 1.5.5: listening no longer ends a fraction of a second after activation
+Found in the 1.5.4 device re-test. Logcat showed "Silence detected (VAD)"
+40 to 110 ms after activation, so the popup flashed and closed. Cause: the
+capture loop in `AudioPreprocessor` keeps running while the call sign listens,
+and its trailing-silence counter (`hasHeardSpeech`, `silentChunks`) carried
+sound from before activation into the new session.
+- `AudioPreprocessor.resetVad()` clears the counter on the next chunk.
+  `OverlayService.startListening()` calls it on every activation.
+- `MIN_LISTEN_MS = 1000L`: VAD silence cannot end a session earlier than 1 s
+  after activation. The ignored event is logged. The mic window cap still
+  applies.
+- Built with Gradle and unit tests run on JC's PC. Device re-test pending.
+
 ### 2026-09-24: 1.5.4: W1b, fixes from the failed W1 device tests
 Branch `w1b-device-fixes`. Five defects from JC's W1 test run on the TECNO LJ9,
 plus the test card. **Not built with Gradle and not installed** (no Android SDK
-in the session; see section 9).
+in the session; see section 9). Later built on JC's PC: `testDebugUnitTest`
+19 of 19 pass, `assembleDebug` pass, installed as versionCode 10.
 
 - **Popup no longer sticks on "Transcribing...".** New `STATUS_TRANSCRIBING`,
   emitted by `stopListening()` when the state moves to PREPROCESSING. It is now

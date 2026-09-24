@@ -24,7 +24,7 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | ID | State | Evidence |
 |---|---|---|
 | W1 | Code done in `41e66c7` (1.5.3). **Device tests failed 2026-09-24.** Fixes are W1b. | JC's device report, Log 2026-09-24 (device tests) |
-| W1b | **Code done, device tests pending.** 1.5.4-tester on branch `w1b-device-fixes`, not merged. Not built with Gradle: no Android SDK in the session. | Log 2026-09-24 (W1b code) |
+| W1b | **Tests 1, 2, 4 pass on 1.5.4. Test 3 passes with one new defect, fixed in 1.5.5 (device re-test pending). Test 5 not run.** Branch `w1b-device-fixes`, not merged. | Log 2026-09-24 (1.5.4 device re-test) |
 | W2 | Not started. Panel item 12: "make it understand i-click or remove the hyphen". `iklik`, `itap`, `ipindot`, `ipindutin`, `iscroll` absent from the lexicon, checked 2026-09-24. Part B follows `DEV_GUIDE.md` 6a. | |
 | W3 | Not started. Needed before the app expert receives the APK. Scope widened 2026-09-24: pixel-art popup and a screen-edge listening glow. | |
 | W7 | Not started. Spoken announcements (offline text to speech). Requested 2026-09-24. | |
@@ -33,6 +33,29 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 | W6 | Continues with each workstream. | |
 
 ### Log
+
+**2026-09-24 (1.5.4 device re-test), Cowork-Claude.** Built `fe775f5` on JC's
+PC: `testDebugUnitTest` 19 of 19 pass, `assembleDebug` pass, stamp clean.
+Installed clean on the TECNO LJ9 as versionCode 10. JC's results, checked
+against logcat:
+- Test 1 pass. A second press while transcribing logs "Rejected activation:
+  pipeline is in state PREPROCESSING". Stop during transcription drops the
+  late transcript by session number, as designed.
+- Test 2 pass. The call sign stays On after Stop and "Hey Jarvis" still opens
+  the mic.
+- Test 3 pass. The app was swiped from Recents; "Hey Jarvis" and the
+  accessibility button still worked. The same process (one PID) ran for the
+  whole session and the log shows one service start, so HiOS did not kill it.
+  The volume-key shortcut was null after the clean install.
+- New defect in Test 3: listening sometimes ended 40 to 110 ms after
+  activation ("Silence detected (VAD)"), so the popup flashed and closed.
+  Cause: the VAD counter in `AudioPreprocessor` carried over from call-sign
+  listening. Fixed in 1.5.5 (see the CHANGELOG). Built and unit tests run;
+  device re-test pending.
+- Test 4 pass. The export has SYSTEM LOG and PREVIOUS SYSTEM LOG sections and
+  a `=== SERVICE START` line with build `fe775f5`.
+- Test 5 not run. JC cannot find TalkBack in the HiOS Settings, though the
+  package `com.google.android.marvin.talkback` is installed.
 
 **2026-09-24 (W1b code), Claude Code.** W1b items 1 to 6 written, version
 `1.5.4-tester`, versionCode 10, branch `w1b-device-fixes` (not `master`, not

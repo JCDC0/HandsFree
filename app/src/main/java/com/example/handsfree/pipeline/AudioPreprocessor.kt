@@ -32,6 +32,20 @@ class AudioPreprocessor(private val context: Context? = null) {
 
     @Volatile var isCapturing = false
         private set
+
+    @Volatile private var vadResetRequested = false
+
+    /**
+     * Clear the trailing-silence counter at the start of a listening session.
+     * The capture loop keeps running while the call sign listens, so without
+     * this the counter carries sound heard before activation into the new
+     * session and ends it within a few chunks. Seen on device 2026-09-24:
+     * silence reported 40 to 110 ms after activation.
+     */
+    fun resetVad() {
+        vadResetRequested = true
+    }
+
     private var audioRecord: AudioRecord? = null
     private var captureJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -117,7 +131,13 @@ class AudioPreprocessor(private val context: Context? = null) {
                         continue
                     }
                     val slice = if (read == buffer.size) buffer.copyOf() else buffer.copyOfRange(0, read)
-                    
+
+                    if (vadResetRequested) {
+                        vadResetRequested = false
+                        silentChunks = 0
+                        hasHeardSpeech = false
+                    }
+
                     if (hasSpeech(slice)) {
                         silentChunks = 0
                         hasHeardSpeech = true
