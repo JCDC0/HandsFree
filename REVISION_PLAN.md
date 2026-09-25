@@ -34,6 +34,18 @@ state is recorded in `PROJECT_STATE.md` from section 37. No separate log files.
 
 ### Log
 
+**2026-09-25 (manuscript synced to 1.7.1), Cowork-Claude.** No code change.
+The Google Docs manuscript now describes the app as it is in 1.7.1: the state
+machine is wired (W1), i-click forms resolve (W2 Part A), taps tolerate small
+misspellings of the target name (1.5.7), and activation is the accessibility
+button, the floating button, a long press on volume-down, the in-app button and
+"Hey Jarvis". The Recommendations still say that back, home and scroll are
+matched as literal words; this is true (`CommandExecutor.navigate` uses
+`hasWord`), and is a candidate for W4. The RAD and CRISP-DM figures were redrawn
+to show the four HandsFree modules and the real training numbers. Full record
+in `PROJECT_STATE.md` section 37, Log, Sep 25. Not verified: the manuscript
+was checked by text search only; no one has proofread it end to end.
+
 **2026-09-24 (W3 and W7 closed), Cowork-Claude.** JC confirmed on device that
 1.7.1 keeps the first word after a button press, and approved the W3 look (style
 switch, floating button). `w3-redesign` merged to `master`. A debug APK of
