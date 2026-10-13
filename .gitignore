@@ -31,3 +31,6 @@ app/src/main/assets/whisper/
 # enough for git, and leaving them out meant the call sign silently did nothing
 # on a fresh clone. Whisper's stay out: decoder.onnx alone is 109 MB and GitHub
 # rejects anything over 100 MB.
+
+# Docker build output (docker build --target apk --output out .)
+/out/

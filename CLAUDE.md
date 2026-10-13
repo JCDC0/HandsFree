@@ -258,9 +258,14 @@ the demo. Remove it after the demo, not before.
   preference. Whisper's three files total ~146 MB and are gitignored; they are
   copied in by hand and bundled into the APK at build time. The KWS models
   (3.6 MB) *are* committed, because they fit.
-- **A fresh clone therefore cannot build a working app.** It compiles, then
-  reports the missing file in red at runtime. Anyone who only needs to *run* it
-  should be given the APK instead of the repo. See README.
+- **A fresh `gradlew` build from a clone has no Whisper model.** It compiles,
+  then reports the missing file in red at runtime. Since 2026-10-13 the three
+  files are attached to the GitHub release `models-v1`, and the `Dockerfile`
+  downloads them and checks their SHA-256 sums, so
+  `docker build --target apk --output out .` gives a working APK from a fresh
+  clone. If you re-export the model, upload a new release and update the
+  release URL and the three sums in the `Dockerfile`. The repo is public since
+  the same date: never commit keys, keystores or `local.properties`.
 - **Whisper does not stream.** It consumes a padded 30 s window and emits a
   whole transcript. `getPartialResult()` returns `""` by design. Do not try to
   make it emit live partials; the UI shows a listening state instead.

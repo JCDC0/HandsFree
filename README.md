@@ -62,9 +62,38 @@ for the built APK (~257 MB) and install it:
 adb install -r app-debug.apk
 ```
 
-**If you want to build it:** the models are in the team Drive, under
-`17_Thesis Project/Dataset/onnx_output/`. **They must be renamed as you copy
-them** — the exported names are not the names the app loads:
+## Build with Docker
+
+The app runs on an Android phone, not in a container. The Docker image holds the
+build environment: JDK 17, Android SDK 35 and the Gradle wrapper. It downloads the
+three Whisper files from the
+[`models-v1` release](https://github.com/JCDC0/HandsFree/releases/tag/models-v1)
+and checks their SHA-256 sums. You need only Docker and this repo.
+
+```bash
+git clone https://github.com/JCDC0/HandsFree.git
+cd HandsFree
+docker build --target apk --output out .
+```
+
+The debug APK is written to `out/app-debug.apk`. Install it with
+`adb install -r out/app-debug.apk`, or copy it to the phone and open it.
+The first build downloads about 2 GB (SDK, Gradle, libraries, models) and takes
+10 to 20 minutes. If `app/src/main/assets/whisper/` already holds the three
+files, the build uses them instead of downloading.
+
+## Manuscript
+
+The thesis manuscript is in [`docs/`](docs/).
+
+## Build without Docker
+
+**If you want to build it:** download the three files from the
+[`models-v1` release](https://github.com/JCDC0/HandsFree/releases/tag/models-v1)
+into `app/src/main/assets/whisper/`. Team members can also copy them from the team Drive, under
+`17_Thesis Project/Dataset/onnx_output/`. The release files already have the right
+names. **The Drive copies must be renamed as you copy them**, because the exported
+names are not the names the app loads:
 
 | In Drive | Copy to `app/src/main/assets/whisper/` |
 |---|---|

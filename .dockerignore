@@ -1,0 +1,14 @@
+.git
+.gradle
+.idea
+.kotlin
+.vscode
+.hermes
+build
+app/build
+junk
+local.properties
+out
+*.apk
+*.jpg
+docs/*.pdf
