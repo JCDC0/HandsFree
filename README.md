@@ -12,6 +12,12 @@ it through the Android Accessibility Service. **No network calls, and no LLM in
 the command path** — the thesis argues explicitly against probabilistic GUI
 agents in assistive technology.
 
+<p align="center">
+  <img src="docs/screenshots/handsfree1.jpg" width="250" alt="Home screen with the Start Listening button and the Hey Jarvis wake-word switch">
+  <img src="docs/screenshots/handsfree2.jpg" width="250" alt="Listening state with the pixel-art theme, the edge glow and the floating stop button">
+  <img src="docs/screenshots/handsfree3.jpg" width="250" alt="The Taglish command buksan mo ang youtube transcribed and matched to APP_LAUNCH, opening YouTube">
+</p>
+
 ```
 Mic ─► AudioPreprocessor ─► WhisperOnnxEngine ─► TranslationLayer
                                                         │
