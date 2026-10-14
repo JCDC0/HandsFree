@@ -7,6 +7,7 @@
 #   docker build --target apk --output out .
 #
 # The debug APK is written to ./out/. See README.md, "Build with Docker".
+# To use the published image instead of building, see the release stage below.
 
 FROM eclipse-temurin:17-jdk-jammy AS build
 
@@ -55,3 +56,15 @@ RUN ./gradlew --no-daemon assembleDebug
 
 FROM scratch AS apk
 COPY --from=build /src/app/build/outputs/apk/debug/ /
+
+# Published image: ghcr.io/jcdc0/handsfree. Running it copies the built APK
+# into the folder mounted at /out, so no Android tools are needed to get it.
+#
+#   docker run --rm -v "${PWD}:/out" ghcr.io/jcdc0/handsfree
+FROM busybox:1.36 AS release
+LABEL org.opencontainers.image.source="https://github.com/JCDC0/HandsFree" \
+      org.opencontainers.image.title="HandsFree" \
+      org.opencontainers.image.description="Offline Filipino, English and Taglish voice-control overlay for Android. Contains the debug APK built from this repository." \
+      org.opencontainers.image.licenses="NOASSERTION"
+COPY --from=build /src/app/build/outputs/apk/debug/app-debug.apk /handsfree/app-debug.apk
+CMD ["sh", "-c", "mkdir -p /out && cp /handsfree/app-debug.apk /out/HandsFree-debug.apk && echo 'HandsFree-debug.apk copied to the mounted folder.'"]

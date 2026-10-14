@@ -68,6 +68,19 @@ for the built APK (~257 MB) and install it:
 adb install -r app-debug.apk
 ```
 
+## Get the APK from the Docker image
+
+A ready-built image is published at
+[ghcr.io/jcdc0/handsfree](https://github.com/JCDC0/HandsFree/pkgs/container/handsfree).
+Running it copies the APK into the current folder:
+
+```bash
+docker run --rm -v "${PWD}:/out" ghcr.io/jcdc0/handsfree
+```
+
+The file `HandsFree-debug.apk` appears in the folder you ran the command from.
+The image is built from the `Dockerfile` below (stage `release`).
+
 ## Build with Docker
 
 The app runs on an Android phone, not in a container. The Docker image holds the
