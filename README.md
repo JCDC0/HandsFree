@@ -71,7 +71,7 @@ adb install -r app-debug.apk
 ## Get the APK from the Docker image
 
 A ready-built image is published at
-[ghcr.io/jcdc0/handsfree](https://github.com/JCDC0/HandsFree/pkgs/container/handsfree).
+[ghcr.io/jcdc0/handsfree](https://github.com/users/JCDC0/packages/container/package/handsfree).
 Running it copies the APK into the current folder:
 
 ```bash
