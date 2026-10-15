@@ -101,10 +101,6 @@ The first build downloads about 2 GB (SDK, Gradle, libraries, models) and takes
 10 to 20 minutes. If `app/src/main/assets/whisper/` already holds the three
 files, the build uses them instead of downloading.
 
-## Manuscript
-
-The thesis manuscript is in [`docs/`](docs/).
-
 ## Build without Docker
 
 **If you want to build it:** download the three files from the

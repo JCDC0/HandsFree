@@ -11,4 +11,3 @@ local.properties
 out
 *.apk
 *.jpg
-docs/*.pdf
